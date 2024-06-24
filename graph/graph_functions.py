@@ -5,6 +5,7 @@ import numpy as np
 import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from statsmodels.stats.multitest import multipletests
 from multiprocessing import Pool, Manager
 
 
@@ -37,7 +38,7 @@ def get_ranked_corrs():
         return sorted_ranks[np.argsort(temp)]
 
     # Open and load the dataframe as an array
-    df = pd.read_csv('./../CRISPRGeneDependency.csv', delimiter=',')
+    df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')
     depmap = df.iloc[:, 1:]  # Get rid of cell line names
 
     # Save gene names as np array
@@ -81,6 +82,39 @@ def get_ranked_corrs():
     matrix.to_csv('ranked_corrs_2.csv', index=True)
 
 
+def get_abs_corrs():
+    # Open and load the dataframe as an array
+    df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')
+    depmap = df.iloc[:, 1:]  # Get rid of cell line names
+
+    # Save gene names as np array
+    gene_names = depmap.columns.values
+
+    start_corr = time.time()
+    print('Calculating correlations...')
+
+    # Get correlation matrix
+    corrs_matrix = depmap.corr()  # Pandas doesn't consider NaN values in .corr()
+
+    # Adjust for NaN due to some genes having a St.Dev.=0
+    corrs_matrix.fillna(0, inplace=True)
+    np.fill_diagonal(corrs_matrix.values, 0)
+
+    end_corr = time.time()
+    time_corr = end_corr - start_corr
+    print(f'Time to obtain correlations matrix: {int(time_corr / 60)}min {int(time_corr % 60)}s.')
+
+    # Save as Pandas' object to save row and column labels
+    corrs_matrix.columns = gene_names
+    corrs_matrix.index = gene_names
+
+    # Absolute values
+    abs_corrs = corrs_matrix.abs()
+
+    # Save as .csv file
+    abs_corrs.to_csv('../datasets/abs_corrs_2.csv', index=True)
+
+
 def clean_col_names(col):
     '''Takes a label from the CRISPR dataset which have a structure of 'GeneName (GeneID)'
     and returns only 'GeneName' '''
@@ -96,7 +130,7 @@ def get_genes(complex):
 
 def filter_CORUM():
     # Load CORUM dataset
-    df = pd.read_csv('humanComplexes.txt', delimiter='\t')
+    df = pd.read_csv('../datasets/humanComplexes.txt', delimiter='\t')
 
     # Select rows containing these substrings in their 'Cell line' value
     substrings = ['T cell line ED40515',
@@ -218,7 +252,7 @@ def filter_CORUM():
     complexes = complexes.loc[mask_mono]
 
     # Save as .csv file
-    complexes.to_csv('filtered_complexes.csv', index=False)
+    complexes.to_csv('../datasets/filtered_complexes.csv', index=False)
 
 
 def init_worker():
@@ -227,20 +261,23 @@ def init_worker():
     np.random.seed(seed)
 
 
-def prep_graph(threshold):
+def prep_graph(threshold, ranked):
     '''Loads the ranked correlation matrix from 'rank_transf_symm_2.csv', normalises it,
     computes the adjacency matrix from the threshold argument and returns a graph-tool Graph object
     together with a list of the gene names (with the gene IDs removed)'''
-    gt.openmp_set_num_threads(4)
+    gt.openmp_set_num_threads(10)
 
     print('Preparing graph...')
     start_time = time.time()
-    corrs = pd.read_csv('ranked_corrs.csv', delimiter=',', index_col=0)
+    if ranked:
+        corrs = pd.read_csv('../datasets/ranked_corrs.csv', delimiter=',', index_col=0)
+    else:
+        corrs = pd.read_csv('../datasets/abs_corrs.csv', delimiter=',', index_col=0)
     corrs /= np.max(corrs.values)   # Normalise
     gene_names = np.array([clean_col_names(col) for col in corrs.columns])  # Remove gene IDs
 
     # Create adjacency matrix A
-    A = (corrs.values > threshold).astype(int)
+    A = (corrs.values > threshold).astype(np.int8)
 
     # Instantiate graph-tool Graph and add nodes & edges based on A
     g = gt.Graph(directed=False)
@@ -249,13 +286,19 @@ def prep_graph(threshold):
     g.add_edge_list(edges)
     print(f'Data loaded in {time.time() - start_time:.2} seconds.')
 
-    return g, gene_names
+    # Add gene names to the nodes
+    names = g.new_vertex_property('string')
+    for v in g.vertices():
+        names[int(v)] = gene_names[int(v)]
+    g.vertex_properties['names'] = names
+
+    return g
 
 
 def check_genes_presence(complex_names, gene_names):
     '''Check whether all the protein subunits within a given complex
     are present in the CRISPR dataset
-    Returns list removing non-present elements'''
+    Returns list with the non-present elements removed'''
     presence_dict = {gene: gene in gene_names for gene in complex_names}
     present_list = [key for key, value in presence_dict.items() if value]
     return present_list
@@ -381,7 +424,7 @@ def simulate_rewiring(g, internal_nodes, num_iterations=1000):
     # Call 'single_rewiring()' parallelising the process
     with Manager() as manager:
         progress_list = manager.list()
-        with Pool(processes=32, initializer=init_worker) as pool:
+        with Pool(processes=40, initializer=init_worker) as pool:
             results = [pool.apply_async(single_rewiring, args=(internal_nodes, external_nodes, degrees, progress_list)) for _ in range(num_iterations)]
 
             # Get results from all iterations
@@ -397,6 +440,7 @@ def simulate_rewiring(g, internal_nodes, num_iterations=1000):
 
     # Get observed EDR
     observed = edge_density_ratio(g, internal_mask, external_mask)
+    ratios.append(observed)
 
     # Calculate the p value
     p_value = np.mean([r >= observed for r in ratios])
@@ -408,35 +452,45 @@ def edge_density(g):
     return g.num_edges() / (g.num_vertices() * (g.num_vertices() - 1) / 2)
 
 
-def plot_density_per_threshold(n_points=40):
+def plot_edgestats_per_threshold(n_points=100):
     # Array of thresholds to plot
     thresholds = np.arange(0, 1, 1 / n_points)
 
     # Parallelise the creation of the graph objects
     with Pool(processes=40) as pool:
-        results = [pool.apply_async(prep_graph, args=(threshold)) for threshold in thresholds]
-    gs = [result.get()[0] for result in results]
+        results = [pool.apply_async(prep_graph, args=(threshold, False)) for threshold in thresholds]
+        gs = [result.get() for result in results]
 
     # Obtain the density of each graph
     densities = [edge_density(g) for g in gs]
+    numbers_edges = [g.num_edges() for g in gs]
 
     # Plotting settings
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
-    plt.rcParams.update({'font.size': 21})
+    plt.rcParams.update({'font.size': 23})
 
     # Plot
-    ax, fig = plt.subplots(1, 1, figsize=(8, 6))
-    ax.plot(thresholds, densities)
-    ax.set_title('Edge density vs threshold')
-    ax.set_xlabel('Threshold')
-    ax.set_ylabel('Edge density')
-    ax.grid(True)
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+    ax[0].plot(thresholds, densities)
+    ax[0].set_title('Edge density vs threshold')
+    ax[0].set_xlabel('Threshold')
+    ax[0].set_ylabel('Edge density')
+    ax[0].grid(True)
+
+    ax[1].plot(thresholds, numbers_edges)
+    ax[1].set_title('Edge number vs threshold')
+    ax[1].set_xlabel('Threshold')
+    ax[1].set_ylabel('Edge number')
+    ax[1].set_yscale('log')
+    ax[1].grid(True)
+
     plt.tight_layout()
     plt.show()
 
 
-def hist_num_genes(threshold):
+def hist_num_genes(threshold, ranked=True):
     # Plotting settings
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -444,14 +498,16 @@ def hist_num_genes(threshold):
 
     # Open the relevant results dataset
     number = str(threshold)[2:]
-    df = pd.read_csv(f'results_{number}.csv')
-
+    if ranked:
+        df = pd.read_csv(f'results_ranked/results_{number}.csv')
+    else:
+        df = pd.read_csv(f'results_abs/results_{number}.csv')
     significant_df = df[df['Significant']]
-    significant = significant_df['Number of genes'].values
+    significant = significant_df['# genes'].values
     bins_significant = int(max(significant) - min(significant))
 
     nonsignificant_df = df[df['Significant'] == 0]
-    nonsignificant = nonsignificant_df['Number of genes'].values
+    nonsignificant = nonsignificant_df['# genes'].values
     bins_nonsignificant = int(max(nonsignificant) - min(nonsignificant))
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
@@ -471,7 +527,16 @@ def hist_num_genes(threshold):
 def fraction_found_complexes(threshold):
     # Open the relevant results dataset
     number = str(threshold)[2:]
-    df = pd.read_csv(f'results_{number}.csv')
+    df = pd.read_csv(f'results_abs/results_{number}.csv')
 
     # Obtain fraction of successfully found complexes
     return len(df[df['Significant']]) / len(df)
+
+
+def adapt_df(df):
+    df = df.rename(columns={'Significant': 'Significant (BY)', 'Corrected pval': 'corrected pval (BY)'})
+    reject, corrected, _, _ = multipletests(df['pval'].values, alpha=0.05, method='fdr_bh')
+    df['Significant (BH)'] = reject
+    df['corrected pval (BH)'] = corrected
+    df = df[['ComplexID', 'Cell line', 'subunits(Gene name)', 'pval', 'corrected pval (BY)', 'Significant (BY)', 'corrected pval (BH)', 'Significant (BH)', 'Observed ratio', '# genes', 'All genes present', 'Null ratios']]
+    return df

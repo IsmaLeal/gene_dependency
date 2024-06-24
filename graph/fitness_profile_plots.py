@@ -20,25 +20,23 @@ plt.rc('font', family='arial')      # Font
 plt.rcParams.update({'font.size': 15})    # Fontsize
 
 # Data processing
-df = pd.read_csv('../CRISPRGeneDependency.csv', delimiter=',')    # Load dataframe
+df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')    # Load dataframe
 df = df.iloc[:, 1:]     # Remove cancer cell line names
 df = df ** 3            # Raise to the 3rd power to highlight essentiality
 threshold = 0.3         # Less essential genes will be omitted
 
 def apply_threshold(col): return col.max() > threshold  # Returns Boolean describing if exceeds threshold or not
 
-df_filtered = df.iloc[:, df.apply(apply_threshold, axis=0).values]  # Only select columns exceeding threshold
-a = df_filtered.columns # Column names
+df = df.iloc[:, df.apply(apply_threshold, axis=0).values]  # Only select columns exceeding threshold
+a = df.columns # Column names
 
 
 # Filter for the 36 genes of interest
-partial_names = ['PTF1A', 'TCF12',
-                 'HAP1', 'AHI1',
-                 'CDH1', 'CTNNB1', 'PKD1',
-                 'ACTN1', 'SRC', 'JUP', 'VCL', 'PXN', 'BCAR1', 'PTK2', 'TLN1',
-                 'ANKS6', 'NEK8', 'INVS', 'NPHP3',
-                 'ADRB2', 'AKAP5', 'KCNMA1',
-                 'ABL1', 'BCAR1', 'ABI1']
+#partial_names = ['ATP5PD', 'ATP5MG', 'MT-ATP6', 'MT-ATP8', 'ATP5MC1', 'ATP5F1B'
+#                 'ATP5PF', 'ATP5PB', 'ATP5F1A', 'ATP5F1D', 'ATP5F1C', 'ATP5PO',
+#                 'ATP5MF', 'ATP5F1E', 'ATP5ME', 'ATP5IF1']
+names = pd.read_csv('../datasets/names.txt', header=None)
+partial_names = list(np.random.choice(names.values.flatten(), 100))
 
 
 def clean_names(col_name):
@@ -52,7 +50,8 @@ def clean_names(col_name):
 # Regex pattern for columns of interest
 regex_pattern = r'\b(' + '|'.join(re.escape(label) for label in partial_names) + r')(?=\s|\Z)'
 # Filter columns of interest
-df_filtered = df_filtered.filter(regex=regex_pattern)
+df_filtered = df.filter(regex=regex_pattern)
+df_filtered = df_filtered.iloc[:, :12]
 # Remove parentheses from the gene names
 df_filtered.columns = [clean_names(col) for col in df_filtered.columns]
 
