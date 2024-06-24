@@ -1,25 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="On explicit save action" serverName="lealaskerova@localhost:2222 password" useTempFile="true" deleteMissingItems="true">
+  <component name="PublishConfigData" autoUpload="On explicit save action" serverName="lealaskerova@localhost:2222 password" deleteMissingItems="true">
     <serverData>
       <paths name="lealaskerova@localhost:2222 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/lealaskerova/diss/conda_env/1_graph" local="$PROJECT_DIR$/1_graph" web="/" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="lealaskerova@localhost:2222 password (3)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/lealaskerova/diss/conda_env/1-graph" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
-      <paths name="lealaskerova@localhost:2222 password (4)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/home/lealaskerova/diss/conda_env/1_graph" local="$PROJECT_DIR$/1_graph" web="/" />
+            <mapping deploy="/home/lealaskerova/diss/conda_env/code" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>
