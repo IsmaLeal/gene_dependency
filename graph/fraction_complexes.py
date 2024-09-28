@@ -2,24 +2,24 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from statsmodels.stats.multitest import multipletests
-from graph_functions import prep_graph, check_genes_presence, simulate_rewiring
+from functions import prep_graph, load_CORUM, check_genes_presence, simulate_rewiring
 
-## THIS FILE ASSUMES THAT graph_functions.get_ranked_corrs() and
-# graph_functions.filter_CORUM() have already been run
+'''
+THIS FILE ASSUMES THAT graph/functions.get_ranked_corrs() and
+graph/functions.filter_CORUM() have already been run
 
-# REMOVE gene_names AND EXTRACT IT DIRECTLY FROM g.vertex_properties['name']
+WARNING: prep_graph() returns a graph_tool.Graph class object
+	NetworkX is only used in hypergraph/ and ml_model/
+'''
 
-# Load dataframe of complexes of interest
+# Load dataframe of pre-processed complexes of interest
 df = pd.read_csv('../datasets/filtered_complexes.csv')
 
-# 'complex_subunits': list of lists containing the gene names for all the genes in each protein complex
-complex_subunits = df['subunits(Gene name)'].values
-complexes = []
-for idx, complex in enumerate(complex_subunits):
-    complexes.append(complex.split(';'))    # 'get_genes()' returns a list of gene names given a complex
+# 'complexes': list of lists containing the gene names of subunits of each complex
+complexes = load_CORUM()
 
 # Create graph from rank-normalised correlation matrix
-threshold = 0.15
+threshold = 0.20
 g = prep_graph(threshold, ranked=False)
 gene_names = np.array(g.vertex_properties['names'])
 
@@ -27,7 +27,7 @@ gene_names = np.array(g.vertex_properties['names'])
 observed_edrs = []
 p_values = []
 null_distributions = []
-all_genes = np.ones_like(complex_subunits)  # Boolean column (0 if any gene from the CORUM complex is not in the CRISPR dataset)
+all_genes = np.ones_like(complexes)  # Boolean column (0 if any gene from the CORUM complex is not in the CRISPR dataset)
 n_genes = []
 
 # Iterate through each complex
@@ -48,7 +48,7 @@ for idx, complex in tqdm(enumerate(complexes)):
     # Get list of indices of internal nodes to call 'simulate_rewiring()'
     internal_nodes = [idx for idx, name in enumerate(gene_names) if name in names]
     # Obtain edge density ratio, null distribution and p-value for the complex
-    edr, p_value, null_distr = simulate_rewiring(g, internal_nodes, 2000)
+    edr, p_value, null_distr = simulate_rewiring(g, internal_nodes, 10000)
     # Save obtained values
     observed_edrs.append(edr)
     p_values.append(p_value)
@@ -77,6 +77,8 @@ df['Corrected pval'] = p_corrected
 
 df = df[['ComplexID', 'Cell line', 'subunits(Gene name)', 'pval', 'Corrected pval',
          'Significant', 'Observed ratio', '# genes', 'All genes present', 'Null ratios']]
+
+df = adapt_df(df)
 
 # Save as .csv file
 df.to_csv('results_abs/results_15.csv', index=False)

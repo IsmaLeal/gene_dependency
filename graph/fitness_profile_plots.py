@@ -14,6 +14,8 @@ for every pair of genes over all the cell lines for which both were screened (ie
 Together (dendrogram left, plots right) they look better
 '''
 
+random = True
+
 # Plotting settings
 plt.rc('text', usetex=True)         # Allow LaTeX
 plt.rc('font', family='arial')      # Font
@@ -22,7 +24,7 @@ plt.rcParams.update({'font.size': 15})    # Fontsize
 # Data processing
 df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')    # Load dataframe
 df = df.iloc[:, 1:]     # Remove cancer cell line names
-df = df ** 3            # Raise to the 3rd power to highlight essentiality
+#df = df ** 3            # Raise to the 3rd power to highlight essentiality
 threshold = 0.3         # Less essential genes will be omitted
 
 def apply_threshold(col): return col.max() > threshold  # Returns Boolean describing if exceeds threshold or not
@@ -30,13 +32,13 @@ def apply_threshold(col): return col.max() > threshold  # Returns Boolean descri
 df = df.iloc[:, df.apply(apply_threshold, axis=0).values]  # Only select columns exceeding threshold
 a = df.columns # Column names
 
-
-# Filter for the 36 genes of interest
-#partial_names = ['ATP5PD', 'ATP5MG', 'MT-ATP6', 'MT-ATP8', 'ATP5MC1', 'ATP5F1B'
-#                 'ATP5PF', 'ATP5PB', 'ATP5F1A', 'ATP5F1D', 'ATP5F1C', 'ATP5PO',
-#                 'ATP5MF', 'ATP5F1E', 'ATP5ME', 'ATP5IF1']
 names = pd.read_csv('../datasets/names.txt', header=None)
-partial_names = list(np.random.choice(names.values.flatten(), 100))
+if random:
+    partial_names = list(np.random.choice(names.values.flatten(), 100))
+else:
+    partial_names = ['ATP5PD', 'ATP5MG', 'MT-ATP6', 'MT-ATP8', 'ATP5MC1', 'ATP5F1B'
+                    'ATP5PF', 'ATP5PB', 'ATP5F1A', 'ATP5F1D', 'ATP5F1C', 'ATP5PO',
+                    'ATP5MF', 'ATP5F1E', 'ATP5ME', 'ATP5IF1']
 
 
 def clean_names(col_name):
@@ -72,13 +74,16 @@ linked = linkage(condensed_dists, method='complete')
 # Plot dendrogram
 fig_dendro, ax_dendro = plt.subplots(1, 1, figsize=(11, 12))
 dendro = dendrogram(linked, labels=df_filtered.columns, orientation='left', distance_sort='descending', ax=ax_dendro)
+for label in ax_dendro.get_yticklabels():
+    label.set_size(14)
+ax_dendro.set_xlabel('Distance', fontsize=36)
 
 # Plot ordered fitness profiles
 data = df_filtered.iloc[:, dendro['leaves']]    # Order as in dendrogram
 
 # Create line plots
 num_genes = data.shape[1]
-fig_lines, ax_lines = plt.subplots(num_genes, 1, figsize=(11, 12))
+fig_lines, ax_lines = plt.subplots(num_genes, 1, figsize=(10, 12))
 data = data.T   # Make genes be rows instead of columns
 
 
@@ -87,6 +92,7 @@ for i, (idx, row) in enumerate(data.iterrows()):
     ax_lines[num_genes - 1 - i].set_xticks([])
     ax_lines[num_genes - 1 - i].set_yticks([])
     if i == 0:
-        ax_lines[num_genes - 1 - i].set_xlabel('Cell lines')
+        ax_lines[num_genes - 1 - i].set_xlabel('Cell lines', fontsize=36)
 
+plt.tight_layout()
 plt.show()

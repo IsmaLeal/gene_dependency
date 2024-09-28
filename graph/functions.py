@@ -12,10 +12,11 @@ from multiprocessing import Pool, Manager
 def get_ranked_corrs():
     '''Saves a square symmetric array of the ranked correlations for every pair of genes
     Saves it in 'rank_transf_symm.csv', with row and column labels.'''
-    # Function that returns a vector ranked
+    # Create a function that returns a vector ranked
     def rank_array(arr):
         '''This function takes a vector (a row)
-        and returns a vector of the same length with its ranks starting from the smallest value'''
+        and returns a vector of the same length
+        with its ranks starting from the smallest value'''
 
         # Indices that sort the array
         temp = arr.argsort()
@@ -44,19 +45,12 @@ def get_ranked_corrs():
     # Save gene names as np array
     gene_names = depmap.columns.values
 
-    start_corr = time.time()
-    print('Calculating correlations...')
-
     # Get correlation matrix
     corrs_matrix = depmap.corr()  # Pandas doesn't consider NaN values in .corr()
 
     # Adjust for NaN due to some genes having a St.Dev.=0
     corrs_matrix.fillna(0, inplace=True)
     np.fill_diagonal(corrs_matrix.values, 0)
-
-    end_corr = time.time()
-    time_corr = end_corr - start_corr
-    print(f'Time to obtain correlations matrix: {int(time_corr / 60)}min {int(time_corr % 60)}s.')
 
     # Create array to hold the ranks
     rank_transformation = np.zeros_like(corrs_matrix.values)
@@ -90,19 +84,12 @@ def get_abs_corrs():
     # Save gene names as np array
     gene_names = depmap.columns.values
 
-    start_corr = time.time()
-    print('Calculating correlations...')
-
     # Get correlation matrix
     corrs_matrix = depmap.corr()  # Pandas doesn't consider NaN values in .corr()
 
     # Adjust for NaN due to some genes having a St.Dev.=0
     corrs_matrix.fillna(0, inplace=True)
     np.fill_diagonal(corrs_matrix.values, 0)
-
-    end_corr = time.time()
-    time_corr = end_corr - start_corr
-    print(f'Time to obtain correlations matrix: {int(time_corr / 60)}min {int(time_corr % 60)}s.')
 
     # Save as Pandas' object to save row and column labels
     corrs_matrix.columns = gene_names
@@ -116,7 +103,8 @@ def get_abs_corrs():
 
 
 def clean_col_names(col):
-    '''Takes a label from the CRISPR dataset which have a structure of 'GeneName (GeneID)'
+    '''Takes a label from the CRISPR dataset
+    which have a structure of 'GeneName (GeneID)'
     and returns only 'GeneName' '''
     return col.split(' (')[0]
 
@@ -130,7 +118,11 @@ def get_genes(complex):
 
 def filter_CORUM():
     # Load CORUM dataset
-    df = pd.read_csv('../datasets/humanComplexes.txt', delimiter='\t')
+    file_path = '../datasets/humanComplexes.txt'
+    try:
+        df = pd.read_csv(file_path, delimiter='\t')
+    except:
+        print(f'File {file_path} does not exist. Please re-download from CORUM website')
 
     # Select rows containing these substrings in their 'Cell line' value
     substrings = ['T cell line ED40515',
@@ -252,23 +244,43 @@ def filter_CORUM():
     complexes = complexes.loc[mask_mono]
 
     # Save as .csv file
-    complexes.to_csv('../datasets/filtered_complexes.csv', index=False)
+    return complexes
+
+
+def load_CORUM():
+    '''
+    Loads the previously created dataset of complexes of interest, and returns the list of names
+    '''
+
+    # Load complexes
+    file_path = '../datasets/filtered_complexes.csv'
+    try:
+        df = pd.read_csv(file_path)
+        # Process protein subunit names for each complex:
+        # convert from one string per complex in the column 'subunits(Gene name)'
+        # to one list per complex in 'complexes'
+        complexes_strings = df['subunits(Gene name)'].values
+        complexes = [complex.split(';') for complex in complexes_strings]
+
+    except:
+        print(f'File {file_path} does not exist. Please run filter_CORUM()')
+        complexes = None
+
+    return complexes
 
 
 def init_worker():
-    '''Makes sure each of the CPU cores do not return the same pseudorandom results'''
+    '''Makes sure each of the CPU cores do
+    not return the same pseudorandom results'''
     seed = os.getpid()
     np.random.seed(seed)
 
 
 def prep_graph(threshold, ranked):
-    '''Loads the ranked correlation matrix from 'rank_transf_symm_2.csv', normalises it,
-    computes the adjacency matrix from the threshold argument and returns a graph-tool Graph object
-    together with a list of the gene names (with the gene IDs removed)'''
-    gt.openmp_set_num_threads(10)
+    '''Loads the (ranked) correlation matrix, normalises it, computes the adjacency matrix
+    from the threshold argument and returns a graph-tool Graph object with a property map
+    of the gene names (with the gene IDs removed)'''
 
-    print('Preparing graph...')
-    start_time = time.time()
     if ranked:
         corrs = pd.read_csv('../datasets/ranked_corrs.csv', delimiter=',', index_col=0)
     else:
@@ -284,7 +296,6 @@ def prep_graph(threshold, ranked):
     g.add_vertex(n=A.shape[0])
     edges = np.transpose(np.nonzero(np.triu(A, 1))) # Use k=1 to prevent self-interactions
     g.add_edge_list(edges)
-    print(f'Data loaded in {time.time() - start_time:.2} seconds.')
 
     # Add gene names to the nodes
     names = g.new_vertex_property('string')
@@ -305,7 +316,8 @@ def check_genes_presence(complex_names, gene_names):
 
 
 def count_external_edges(g, internal_mask, external_mask):
-    '''Counts edges external to a complex (i.e., connecting an external and an internal node)'''
+    '''Counts edges external to a complex (i.e.,
+    connecting an external and an internal node)'''
     internal_view = gt.GraphView(g, vfilt=internal_mask)
     external_view = gt.GraphView(g, vfilt=external_mask)
 
@@ -473,6 +485,7 @@ def plot_edgestats_per_threshold(n_points=100):
     # Plot
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
+    # Create axes
     ax[0].plot(thresholds, densities)
     ax[0].set_title('Edge density vs threshold')
     ax[0].set_xlabel('Threshold')
@@ -490,7 +503,7 @@ def plot_edgestats_per_threshold(n_points=100):
     plt.show()
 
 
-def hist_num_genes(threshold, ranked=True):
+def hist_num_genes(threshold):
     # Plotting settings
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -498,18 +511,16 @@ def hist_num_genes(threshold, ranked=True):
 
     # Open the relevant results dataset
     number = str(threshold)[2:]
-    if ranked:
-        df = pd.read_csv(f'results_ranked/results_{number}.csv')
-    else:
-        df = pd.read_csv(f'results_abs/results_{number}.csv')
-    significant_df = df[df['Significant']]
+    df = pd.read_csv(f'results/results_{number}.csv')
+    significant_df = df[df['Significant (BY)']]
     significant = significant_df['# genes'].values
     bins_significant = int(max(significant) - min(significant))
 
-    nonsignificant_df = df[df['Significant'] == 0]
+    nonsignificant_df = df[df['Significant (BY)'] == 0]
     nonsignificant = nonsignificant_df['# genes'].values
     bins_nonsignificant = int(max(nonsignificant) - min(nonsignificant))
 
+    # Create plot
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
     ax.hist(nonsignificant, bins=bins_nonsignificant, color='blue', alpha=0.4, label='Non-significant complexes')
     ax.hist(significant, bins=bins_significant, color='orange', alpha=0.6, label='Significant complexes')
