@@ -10,52 +10,59 @@ from multiprocessing import Pool, Manager
 
 
 def get_ranked_corrs():
-    '''Saves a square symmetric array of the ranked correlations for every pair of genes
-    Saves it in 'rank_transf_symm.csv', with row and column labels.'''
-    # Create a function that returns a vector ranked
-    def rank_array(arr):
-        '''This function takes a vector (a row)
-        and returns a vector of the same length
-        with its ranks starting from the smallest value'''
+    """
+    Computes and saves a symmetric matrix of ranked correlations for every pair of genes.
 
-        # Indices that sort the array
-        temp = arr.argsort()
-        # Ranks
-        ranks = temp.argsort() + 1
+    The function loads a gene dependency dataset, computes the correlation matrix, applies
+    a ranking transformation to each row, and symmetrises the result.
+    The array is saved in 'rank_transf_symm.csv' with row and column labels.
+
+    Notes
+    -----
+    - The ranking transformation accounts for ties by assigning their average rank.
+    - The correlation matrix is adjusted for NaN values by replacing them with zero.
+    - The symmetrisation ensures the highest rank is preserved between pairs.
+    """
+    def rank_array(arr):
+        """
+        Ranks the elements in an array, handling ties by assigning their average rank.
+
+        Parameters
+        ----------
+        arr : np.ndarray
+            Input numerical array.
+
+        Returns
+        -------
+        np.ndarray
+            Ranked array with the same shape as the input.
+        """
+        temp = arr.argsort()            # Indices that sort the array
+        ranks = temp.argsort() + 1      # Ranks
 
         # Compute rank of ties
         sorted = np.sort(arr)
         sorted_ranks = np.sort(ranks).astype('float64')
         for i in range(len(arr)):
             start = 0
-            # Check if this element is the start of a series of ties
-            if i == 0 or sorted[i] != sorted[i - 1]:
+            if i == 0 or sorted[i] != sorted[i - 1]:            # Check if element starts a series of ties
                 start = i
-            # If it is the end of a series of ties
-            if i == len(arr) - 1 or sorted[i] != sorted[i + 1]:
+            if i == len(arr) - 1 or sorted[i] != sorted[i + 1]: # If it ends a series of ties
                 end = i + 1
                 avg_rank = np.mean(sorted_ranks[start:end])
                 sorted_ranks[start:end] = avg_rank
+                
         return sorted_ranks[np.argsort(temp)]
 
-    # Open and load the dataframe as an array
     df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')
-    depmap = df.iloc[:, 1:]  # Get rid of cell line names
-
-    # Save gene names as np array
-    gene_names = depmap.columns.values
-
-    # Get correlation matrix
-    corrs_matrix = depmap.corr()  # Pandas doesn't consider NaN values in .corr()
-
-    # Adjust for NaN due to some genes having a St.Dev.=0
-    corrs_matrix.fillna(0, inplace=True)
+    depmap = df.iloc[:, 1:]                       # Get rid of cell line names
+    gene_names = depmap.columns.values            # Save gene names as np.ndarray
+    corrs_matrix = depmap.corr()                  # Get correlation matrix
+    corrs_matrix.fillna(0, inplace=True)          # Adjust for NaN due to some genes having S.D.=0
     np.fill_diagonal(corrs_matrix.values, 0)
 
     # Create array to hold the ranks
     rank_transformation = np.zeros_like(corrs_matrix.values)
-
-    # Iterate over each row to rank
     for idx, cell_line in tqdm(enumerate(corrs_matrix.values)):
         rank_transformation[idx, :] = rank_array(cell_line)
 
@@ -67,56 +74,82 @@ def get_ranked_corrs():
             elif rank_transformation[i, j] < rank_transformation[j, i]:
                 rank_transformation[i, j] = rank_transformation[j, i]
 
-    # Save as Pandas' object to save row and column labels
+    # Save as .csv file
     matrix = pd.DataFrame(rank_transformation)
     matrix.columns = gene_names
     matrix.index = gene_names
-
-    # Save as .csv file
     matrix.to_csv('ranked_corrs_2.csv', index=True)
 
 
 def get_abs_corrs():
-    # Open and load the dataframe as an array
+    """
+    Computes and saves a symmetric matrix of absolute correlations for every pair of genes.
+    
+    The function loads a gene dependency dataset and computes the absolute correlation matrix.
+    The array is saved in 'rank_transf_symm.csv' with row and column labels.
+
+    Notes
+    -----
+    - The correlation matrix is adjusted for NaN values by replacing them with zero.
+    """
     df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')
-    depmap = df.iloc[:, 1:]  # Get rid of cell line names
-
-    # Save gene names as np array
-    gene_names = depmap.columns.values
-
-    # Get correlation matrix
-    corrs_matrix = depmap.corr()  # Pandas doesn't consider NaN values in .corr()
-
-    # Adjust for NaN due to some genes having a St.Dev.=0
-    corrs_matrix.fillna(0, inplace=True)
+    depmap = df.iloc[:, 1:]                   # Get rid of cell line names
+    gene_names = depmap.columns.values        # Save gene names as np.ndarray
+    corrs_matrix = depmap.corr()              # Get correlation matrix
+    corrs_matrix.fillna(0, inplace=True)      # Adjust for NaN due to some genes having S.D.=0
     np.fill_diagonal(corrs_matrix.values, 0)
-
-    # Save as Pandas' object to save row and column labels
     corrs_matrix.columns = gene_names
     corrs_matrix.index = gene_names
-
-    # Absolute values
-    abs_corrs = corrs_matrix.abs()
-
-    # Save as .csv file
+    abs_corrs = corrs_matrix.abs()            # Absolute values
     abs_corrs.to_csv('../datasets/abs_corrs_2.csv', index=True)
 
 
 def clean_col_names(col):
-    '''Takes a label from the CRISPR dataset
-    which have a structure of 'GeneName (GeneID)'
-    and returns only 'GeneName' '''
+    """
+    Extracts gene names from a label formatted as 'GeneName (GeneID)'.
+
+    Parameters
+    ----------
+    col : str
+        Column label containing gene name and ID.
+
+    Returns
+    -------
+    str
+        Extracted gene name.
+    """
     return col.split(' (')[0]
 
 
 def get_genes(complex):
-    '''Returns a list of different gene names within a complexes
-     Example input: 'PRORP;TRMT10C;HSD17B10'
-     Example output: ['PRORP', 'TRMT10C', 'HSD17B10']'''
+    """
+    Splits a complex string containing multiple gene names separated by ';'.
+
+    Example input: 'PRORP;TRMT10C;HSD17B10'
+    Example output: ['PRORP', 'TRMT10C', 'HSD17B10']
+    
+    Parameters
+    ----------
+    complex : str
+        String of gene names separated by semicolons.
+
+    Returns
+    -------
+    list
+        List of individual gene names.
+    """
     return complex.split(';')
 
 
 def filter_CORUM():
+    """
+    Filters the CORUM dataset for relevant protein complexes based on pre-defined cell line names.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered dataset of protein complexes.
+    """
     # Load CORUM dataset
     file_path = '../datasets/humanComplexes.txt'
     try:
@@ -230,94 +263,149 @@ def filter_CORUM():
     exact_mask = df['Cell line'].isin(exact)
     total_mask = partial_mask | exact_mask
 
-    # Obtain filtered dataframe
+    # Obtain filtered dataframe, select relevant columns, sort by 'Cell line'
     complexes_full = df[total_mask]
-
-    # Select specific columns
     complexes = complexes_full[['ComplexID', 'ComplexName', 'Cell line', 'subunits(Gene name)', 'GO description', 'FunCat description']]
-
-    # Sort by 'Cell line'
     complexes = complexes.sort_values(by=['Cell line'])
 
     # Exclude 'complexes' including only one subunit/ gene
     mask_mono = [len(complexes['subunits(Gene name)'].values[i].split(';')) > 1 for i in range(len(complexes))]
     complexes = complexes.loc[mask_mono]
-
-    # Save as .csv file
     return complexes
 
 
 def load_CORUM():
-    '''
-    Loads the previously created dataset of complexes of interest, and returns the list of names
-    '''
+    """
+    Loads the filtered CORUM dataset from '../datasets/filtered_complexes.csv'.
 
-    # Load complexes
+    Returns
+    -------
+    complexes : list
+        List of protein complexes (each complex is a list of gene names) or None
+        if the file is missing.
+    
+    Examples
+    --------
+    >>> complexes = load_CORUM()
+    >>> print(complexes[0])
+    ['GeneA', 'GeneB', 'GeneC']
+    """
     file_path = '../datasets/filtered_complexes.csv'
     try:
         df = pd.read_csv(file_path)
-        # Process protein subunit names for each complex:
-        # convert from one string per complex in the column 'subunits(Gene name)'
-        # to one list per complex in 'complexes'
         complexes_strings = df['subunits(Gene name)'].values
         complexes = [complex.split(';') for complex in complexes_strings]
-
     except:
-        print(f'File {file_path} does not exist. Please run filter_CORUM()')
+        print(f'File {file_path} does not exist. Please run filter_CORUM().')
         complexes = None
-
     return complexes
 
 
 def init_worker():
-    '''Makes sure each of the CPU cores do
-    not return the same pseudorandom results'''
+    """
+    Initialises a worker process by setting a unique random seed based on the process ID.
+
+    Ensures that different processes generate different random sequences.
+    """
     seed = os.getpid()
     np.random.seed(seed)
 
 
-def prep_graph(threshold, ranked):
-    '''Loads the (ranked) correlation matrix, normalises it, computes the adjacency matrix
-    from the threshold argument and returns a graph-tool Graph object with a property map
-    of the gene names (with the gene IDs removed)'''
+def prep_graph(threshold=0.2, ranked=False):
+    """
+    Constructs a graph-tool Graph object from a correlation matrix.
 
-    if ranked:
-        corrs = pd.read_csv('../datasets/ranked_corrs.csv', delimiter=',', index_col=0)
-    else:
-        corrs = pd.read_csv('../datasets/abs_corrs.csv', delimiter=',', index_col=0)
-    corrs /= np.max(corrs.values)   # Normalise
-    gene_names = np.array([clean_col_names(col) for col in corrs.columns])  # Remove gene IDs
+    The function loads either the ranked or absolute correlation matrix, normalises it,
+    applies a threshold to create an adjacency matrix, and constructs an undirected simple
+    graph where nodes represent genes.
 
-    # Create adjacency matrix A
-    A = (corrs.values > threshold).astype(np.int8)
+    Parameters
+    ----------
+    threshold : float, optional
+        Minimum correlation value to consider an edge. Has to be between 0 and 1. Defaults to 0.2.
+    ranked : bool, optional
+        Whether to use the ranked correlation matrix. Default is False.
 
-    # Instantiate graph-tool Graph and add nodes & edges based on A
-    g = gt.Graph(directed=False)
-    g.add_vertex(n=A.shape[0])
-    edges = np.transpose(np.nonzero(np.triu(A, 1))) # Use k=1 to prevent self-interactions
-    g.add_edge_list(edges)
+    Returns
+    -------
+    graph_tool.Graph
+        A graph object representing gene interactions.
 
-    # Add gene names to the nodes
-    names = g.new_vertex_property('string')
-    for v in g.vertices():
-        names[int(v)] = gene_names[int(v)]
-    g.vertex_properties['names'] = names
+    Examples
+    --------
+    >>> g = prep_graph(threshold=0.5, ranked=True)
+    >>> print(g.num_vertices)
+    """
+    try:
+        if ranked:
+            corrs = pd.read_csv("../datasets/ranked_corrs.csv", delimiter=",", index_col=0)
+        else:
+            corrs = pd.read_csv("../datasets/abs_corrs.csv", delimiter=",", index_col=0)
+        corrs /= np.max(corrs.values)   # Normalise
+        gene_names = np.array(          # Remove gene IDs
+            [clean_col_names(col) for col in corrs.columns]
+        )
+    
+        # Create adjacency matrix A
+        A = (corrs.values > threshold).astype(np.int8)
+    
+        # Instantiate graph-tool Graph and add nodes & edges based on A
+        g = gt.Graph(directed=False)
+        g.add_vertex(n=A.shape[0])
+        edges = np.transpose(np.nonzero(np.triu(A, 1))) # Use k=1 to prevent self-interactions
+        g.add_edge_list(edges)
+    
+        # Add gene names to the nodes
+        names = g.new_vertex_property("string")
+        for v in g.vertices():
+            names[int(v)] = gene_names[int(v)]
+        g.vertex_properties["names"] = names
+        
+    except FileNotFoundError as e:
+        print(f"Error: {e}. Try running get_ranked_corrs() or get_abs_corrs().")
 
     return g
 
 
 def check_genes_presence(complex_names, gene_names):
-    '''Check whether all the protein subunits within a given complex
-    are present in the CRISPR dataset
-    Returns list with the non-present elements removed'''
+    """
+    Checks whether all the protein subunits within a given CORUM complex are present in the CRISPR dataset.
+
+    Parameters
+    ----------
+    complex_names : list of str
+        List of gene names forming a given CORUM complex.
+    gene_names : list of str
+        List of CRISPR gene names available.
+
+    Returns
+    -------
+    present_list : list
+        List of genes from the CORUM complex that are present in the CRISPR dataset.
+    """
     presence_dict = {gene: gene in gene_names for gene in complex_names}
     present_list = [key for key, value in presence_dict.items() if value]
     return present_list
 
 
 def count_external_edges(g, internal_mask, external_mask):
-    '''Counts edges external to a complex (i.e.,
-    connecting an external and an internal node)'''
+    """
+    Counts the number of edges that connect an internal node (part of a complex) to an external node.
+
+    Parameters
+    ----------
+    g : graph_tool.Graph
+        The graph-tool Graph object.
+    internal_mask : graph_tool.PropertyMap
+        Boolean mask for internal nodes.
+    external_mask : graph_tool.PropertyMap
+        Boolean mask for external nodes.
+
+    Returns
+    -------
+    int
+        Number of edges connecting a node in the complex to an external node.
+    """
     internal_view = gt.GraphView(g, vfilt=internal_mask)
     external_view = gt.GraphView(g, vfilt=external_mask)
 
@@ -325,10 +413,28 @@ def count_external_edges(g, internal_mask, external_mask):
 
 
 def edge_density_ratio(g, internal_mask, external_mask):
-    '''Due to how this function computes the edge density ratio (EDR), the only way in which
-    ZeroDivisionError can arise is if the node complex only consists of one single node. However,
-    single-node complexes lack significance for our purpose and will be filtered out before calling
-    this function'''
+    """
+    Computes the Edge Density Ratio (EDR), which is the ratio of internal edge density (IED) to external edge density (EED).
+
+    Parameters
+    ----------
+    g : graph_tool.Graph
+        The graph-tool Graph object.
+    internal_mask : graph_tool.PropertyMap
+        Boolean mask for internal nodes.
+    external_mask : graph_tool.PropertyMap
+        Boolean mask for external nodes.
+
+    Returns
+    -------
+    float
+        The edge density ratio. Returns infinity if EED is zero.
+
+    Notes
+    -----
+    ZeroDivisionError can only occur if the complex consists of a single node. These complexes
+    are already filtered out by filter_CORUM().
+    """
     # Count internal edges with a GraphView instantiation of the complex under consideration
     subgraph = gt.GraphView(g, vfilt=internal_mask)
     n_internal_edges = subgraph.num_edges()
@@ -347,11 +453,39 @@ def edge_density_ratio(g, internal_mask, external_mask):
 
 
 def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
-    '''internal_nodes: list of indices of nodes internal to the complex;
-    external_nodes: list of external nodes indices;
-    degrees: dictionary of each node's index and its degree for the whole graph;
-    progress_list: manager.list() object
-    returns: the edge density ratio of one random rewiring'''
+    """
+    Performs a single random rewiring of edges in a graph and calculates the Edge Density Ratio (EDR).
+
+    The function simulates rewiring by randomly connecting internal nodes with each other or with external nodes
+    based on their degree distribution. It ensures that each stub from an internal node connects to another node
+    based on computed probabilities. The algorithm is:
+    1. Initialise counters for internal (N_int) and external (N_ext) edges.
+    2. Construct a list (`internal_degrees_list`) storing degrees of internal nodes and the sum
+       of all external nodes' degrees.
+    3. For each internal node:
+        - While it has unconnected stubs, compute probabilities of connecting to other nodes.
+        - Select a target node using a probability-weighted random draw.
+        - If the target is internal, increase N_int; otherwise, increase N_ext.
+        - Update degrees accordingly.
+    4. Compute IED and EED.
+    5. Return the EDR = IED / EED.
+
+    Parameters
+    ----------
+    internal_nodes : list of int
+        Indices of nodes that belong to the complex of interest.
+    external_nodes : list of int
+        Indices of nodes that are external to the complex.
+    degrees : dict
+        Dictionary mapping node indices to their respective degrees in the original graph.
+    progress_list : multiprocessing.Manager().list
+        A shared list used to track progress in parallel execution.
+
+    Returns
+    -------
+    edr : float
+        The computed EDR for this rewiring iteration.    
+    """
     # Get the node degree sequence
     current_degrees = degrees.copy()
 
@@ -359,22 +493,19 @@ def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
     N_int = 0
     N_ext = 0
 
-    # 'internal_degrees_list' will contain the degrees of the internal nodes. Additionally,
-    # its last element will be the sum of degrees of all external nodes
+    # Create a list storing degrees of internal nodes, with the last element being the sum of external degrees
     internal_degrees_list = []
     for node in internal_nodes:
         internal_degrees_list.append(current_degrees[node])
     internal_degrees_list.append(sum(current_degrees[i] for i in external_nodes))
 
-    # Connect stubs randomly, node by node
+    # Iterate through internal nodes, assigning stubs probabilistically
     for idx, node in enumerate(internal_nodes):
-        # Do not change nodes until the current one is fully connected
         while internal_degrees_list[idx] > 0:
-            # 'probs' will have the same length as 'internal_degrees_list' and will contain the probabilities
-            # of each stub connecting to each of the internal nodes and any of the external nodes
+            # Compute probabilities for connecting stubs to other nodes
             probs = [internal_degrees_list[i] / sum(internal_degrees_list[j] for j, _ in enumerate(internal_degrees_list) if j != idx) for i, _ in enumerate(internal_degrees_list) if i != idx]
 
-            # Choose where to connect the stub based on 'probs' by drawing a uniformly distributed random number
+            # Select target node based on computed probabilities
             r = np.random.random()
             cum = probs[0]
             iteration = 1
@@ -382,26 +513,17 @@ def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
                 cum += probs[iteration]
                 iteration += 1
 
-            # If internal edge
+            # Determine whether internal or external
             if iteration != len(probs):
-                # Count the edge
                 N_int += 1
-                # Update 'internal_degrees_list'
                 if iteration - 1 >= idx:
                     internal_degrees_list[iteration] -= 1
                 elif iteration - 1 < idx:
                     internal_degrees_list[iteration - 1] -= 1
-            # Else external edge
             else:
-                # Count the edge
                 N_ext += 1
-                # Update 'internal_degrees_list'
                 internal_degrees_list[-1] -=1
             internal_degrees_list[idx] -= 1
-
-
-
-
 
     # Calculate EDR for this iteration
     possible_internal_edges = len(internal_nodes) * (len(internal_nodes) - 1) / 2
@@ -411,7 +533,7 @@ def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
     eed = N_ext / possible_external_edges
     edr = ied / eed if eed != 0 else float('inf')
 
-    progress_list.append(1)
+    progress_list.append(1)    # Track progress for multiprocessing
     return edr
 
 
