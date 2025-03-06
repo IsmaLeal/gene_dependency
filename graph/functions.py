@@ -3,7 +3,7 @@ import graph_tool.all as gt
 import pandas as pd
 import numpy as np
 import time
-from typing import Tuple
+from typing import Tuple, List
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from statsmodels.stats.multitest import multipletests
@@ -105,7 +105,7 @@ def get_abs_corrs() -> None:
     abs_corrs.to_csv("../datasets/abs_corrs_2.csv", index=True)
 
 
-def clean_col_names(col: str) -> list[str]:
+def clean_col_names(col: str) -> str:
     """
     Extracts gene names from a label formatted as 'GeneName (GeneID)'.
 
@@ -122,7 +122,7 @@ def clean_col_names(col: str) -> list[str]:
     return col.split(" (")[0]
 
 
-def get_genes(complex: str) -> list[str]:
+def get_genes(complex: str) -> List[str]:
     """
     Splits a complex string containing multiple gene names separated by ';'.
 
@@ -136,7 +136,7 @@ def get_genes(complex: str) -> list[str]:
 
     Returns
     -------
-    list
+    List[str]
         List of individual gene names.
     """
     return complex.split(";")
@@ -275,13 +275,13 @@ def filter_CORUM() -> pd.DataFrame:
     return complexes
 
 
-def load_CORUM() -> list[str]:
+def load_CORUM() -> List[str]:
     """
     Loads the filtered CORUM dataset from '../datasets/filtered_complexes.csv'.
 
     Returns
     -------
-    complexes : list
+    complexes : List[str]
         List of protein complexes (each complex is a list of gene names) or None
         if the file is missing.
     
@@ -368,21 +368,21 @@ def prep_graph(threshold: float = 0.2, ranked: bool = False) -> graph_tool.Graph
     return g
 
 
-def check_genes_presence(complex_names: list[str],
-                         gene_names: list[str]) -> list[str]:
+def check_genes_presence(complex_names: List[str],
+                         gene_names: List[str]) -> List[str]:
     """
     Checks whether all the protein subunits within a given CORUM complex are present in the CRISPR dataset.
 
     Parameters
     ----------
-    complex_names : list of str
+    complex_names : List[str]
         List of gene names forming a given CORUM complex.
-    gene_names : list of str
+    gene_names : List[str]
         List of CRISPR gene names available.
 
     Returns
     -------
-    present_list : list
+    present_list : List[str]
         List of genes from the CORUM complex that are present in the CRISPR dataset.
     """
     presence_dict = {gene: gene in gene_names for gene in complex_names}
@@ -458,8 +458,8 @@ def edge_density_ratio(g: graph_tool.Graph,
     return ied / eed if eed != 0 else float("inf")
 
 
-def single_rewiring(internal_nodes: list[int],
-                    external_nodes: list[int],
+def single_rewiring(internal_nodes: List[int],
+                    external_nodes: List[int],
                     degrees: dict,
                     progress_list: multiprocessing.Manager().list) -> float:
     """
@@ -481,9 +481,9 @@ def single_rewiring(internal_nodes: list[int],
 
     Parameters
     ----------
-    internal_nodes : list of int
+    internal_nodes : List[int]
         Indices of nodes that belong to the complex of interest.
-    external_nodes : list of int
+    external_nodes : List[int]
         Indices of nodes that are external to the complex.
     degrees : dict
         Dictionary mapping node indices to their respective degrees in the original graph.
@@ -547,8 +547,8 @@ def single_rewiring(internal_nodes: list[int],
 
 
 def simulate_rewiring(g: graph_tool.Graph,
-                      internal_nodes: list[int],
-                      num_iterations: int = 1000) -> Tuple[float, float, list[float]]:
+                      internal_nodes: List[int],
+                      num_iterations: int = 1000) -> Tuple[float, float, List[float]]:
     """
     Calls `single_rewiring()` multiple times, constructing a null distribution for the Edge
     Density Ratio (EDR) and assessing the statistical significance of the observed EDR.
@@ -557,7 +557,7 @@ def simulate_rewiring(g: graph_tool.Graph,
     ----------
     g : graph_tool.Graph
         The graph-tool Graph object representing the genes.
-    internal_nodes : list of int
+    internal_nodes : List[int]
         List of node indices that are internal to the complex of interest.
     num_iterations : int, optional
         Number of random rewirings to perform. Default is 1000.
@@ -568,7 +568,7 @@ def simulate_rewiring(g: graph_tool.Graph,
         Observed EDR for the given complex in the original graph.
     p_value : float
         Statistical significance of the observed EDR against the null distribution.
-    ratios : list of float
+    ratios : List[float]
         Null distribution of EDR values from rewiring simulations.
 
     Examples
