@@ -3,13 +3,14 @@ import graph_tool.all as gt
 import pandas as pd
 import numpy as np
 import time
+from typing import Tuple
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from statsmodels.stats.multitest import multipletests
 from multiprocessing import Pool, Manager
 
 
-def get_ranked_corrs():
+def get_ranked_corrs() -> None:
     """
     Computes and saves a symmetric matrix of ranked correlations for every pair of genes.
 
@@ -23,7 +24,7 @@ def get_ranked_corrs():
     - The correlation matrix is adjusted for NaN values by replacing them with zero.
     - The symmetrisation ensures the highest rank is preserved between pairs.
     """
-    def rank_array(arr):
+    def rank_array(arr: np.ndarray) -> np.ndarray:
         """
         Ranks the elements in an array, handling ties by assigning their average rank.
 
@@ -81,7 +82,7 @@ def get_ranked_corrs():
     matrix.to_csv("ranked_corrs_2.csv", index=True)
 
 
-def get_abs_corrs():
+def get_abs_corrs() -> None:
     """
     Computes and saves a symmetric matrix of absolute correlations for every pair of genes.
     
@@ -104,7 +105,7 @@ def get_abs_corrs():
     abs_corrs.to_csv("../datasets/abs_corrs_2.csv", index=True)
 
 
-def clean_col_names(col):
+def clean_col_names(col: str) -> list[str]:
     """
     Extracts gene names from a label formatted as 'GeneName (GeneID)'.
 
@@ -121,7 +122,7 @@ def clean_col_names(col):
     return col.split(" (")[0]
 
 
-def get_genes(complex):
+def get_genes(complex: str) -> list[str]:
     """
     Splits a complex string containing multiple gene names separated by ';'.
 
@@ -141,7 +142,7 @@ def get_genes(complex):
     return complex.split(";")
 
 
-def filter_CORUM():
+def filter_CORUM() -> pd.DataFrame:
     """
     Filters the CORUM dataset for relevant protein complexes based on pre-defined cell line names.
 
@@ -274,7 +275,7 @@ def filter_CORUM():
     return complexes
 
 
-def load_CORUM():
+def load_CORUM() -> list[str]:
     """
     Loads the filtered CORUM dataset from '../datasets/filtered_complexes.csv'.
 
@@ -301,7 +302,7 @@ def load_CORUM():
     return complexes
 
 
-def init_worker():
+def init_worker() -> None:
     """
     Initialises a worker process by setting a unique random seed based on the process ID.
 
@@ -311,7 +312,7 @@ def init_worker():
     np.random.seed(seed)
 
 
-def prep_graph(threshold=0.2, ranked=False):
+def prep_graph(threshold: float = 0.2, ranked: bool = False) -> graph_tool.Graph:
     """
     Constructs a graph-tool Graph object from a correlation matrix.
 
@@ -367,7 +368,8 @@ def prep_graph(threshold=0.2, ranked=False):
     return g
 
 
-def check_genes_presence(complex_names, gene_names):
+def check_genes_presence(complex_names: list[str],
+                         gene_names: list[str]) -> list[str]:
     """
     Checks whether all the protein subunits within a given CORUM complex are present in the CRISPR dataset.
 
@@ -388,7 +390,9 @@ def check_genes_presence(complex_names, gene_names):
     return present_list
 
 
-def count_external_edges(g, internal_mask, external_mask):
+def count_external_edges(g: graph_tool.Graph,
+                         internal_mask: graph_tool.PropertyMap,
+                         external_mask: graph_tool.PropertyMap) -> int:
     """
     Counts the number of edges that connect an internal node (part of a complex) to an external node.
 
@@ -412,7 +416,9 @@ def count_external_edges(g, internal_mask, external_mask):
     return g.num_edges() - internal_view.num_edges() - external_view.num_edges()
 
 
-def edge_density_ratio(g, internal_mask, external_mask):
+def edge_density_ratio(g: graph_tool.Graph,
+                       internal_mask: graph_tool.PropertyMap,
+                       external_mask: graph_tool.PropertyMap) -> float:
     """
     Computes the Edge Density Ratio (EDR), which is the ratio of internal edge density (IED) to external edge density (EED).
 
@@ -452,7 +458,10 @@ def edge_density_ratio(g, internal_mask, external_mask):
     return ied / eed if eed != 0 else float("inf")
 
 
-def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
+def single_rewiring(internal_nodes: list[int],
+                    external_nodes: list[int],
+                    degrees: dict,
+                    progress_list: multiprocessing.Manager().list) -> float:
     """
     Generates a randomised graph instance from the configuration model and calculates the Edge Density Ratio (EDR).
 
@@ -537,7 +546,9 @@ def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
     return edr
 
 
-def simulate_rewiring(g, internal_nodes, num_iterations=1000):
+def simulate_rewiring(g: graph_tool.Graph,
+                      internal_nodes: list[int],
+                      num_iterations: int = 1000) -> Tuple[float, float, list[float]]:
     """
     Calls `single_rewiring()` multiple times, constructing a null distribution for the Edge
     Density Ratio (EDR) and assessing the statistical significance of the observed EDR.
@@ -598,7 +609,7 @@ def simulate_rewiring(g, internal_nodes, num_iterations=1000):
     return observed, p_value, ratios
 
 
-def edge_density(g):
+def edge_density(g: graph_tool.Graph) -> float:
     """
     Computes the global edge density of a graph.
 
@@ -616,7 +627,7 @@ def edge_density(g):
     return g.num_edges() / (g.num_vertices() * (g.num_vertices() - 1) / 2)
 
 
-def plot_edgestats_per_threshold(n_points=100):
+def plot_edgestats_per_threshold(n_points: int = 100) -> None:
     """
     Plots edge density and number of edges as a function of the threshold used to construct the graph.
 
@@ -663,7 +674,7 @@ def plot_edgestats_per_threshold(n_points=100):
     plt.show()
 
 
-def hist_num_genes(threshold):
+def hist_num_genes(threshold: float) -> None:
     """
     Plots a histogram of the number of genes per significant complex at a given threshold.
 
@@ -712,7 +723,7 @@ def hist_num_genes(threshold):
     plt.show()
 
 
-def fraction_found_complexes(threshold):
+def fraction_found_complexes(threshold: float) -> float:
     """
     Computes the fraction of complexes identified as significant for a given threshold.
 
