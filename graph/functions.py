@@ -54,7 +54,7 @@ def get_ranked_corrs():
                 
         return sorted_ranks[np.argsort(temp)]
 
-    df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')
+    df = pd.read_csv("../datasets/CRISPRGeneDependency.csv", delimiter=",")
     depmap = df.iloc[:, 1:]                       # Get rid of cell line names
     gene_names = depmap.columns.values            # Save gene names as np.ndarray
     corrs_matrix = depmap.corr()                  # Get correlation matrix
@@ -78,7 +78,7 @@ def get_ranked_corrs():
     matrix = pd.DataFrame(rank_transformation)
     matrix.columns = gene_names
     matrix.index = gene_names
-    matrix.to_csv('ranked_corrs_2.csv', index=True)
+    matrix.to_csv("ranked_corrs_2.csv", index=True)
 
 
 def get_abs_corrs():
@@ -92,7 +92,7 @@ def get_abs_corrs():
     -----
     - The correlation matrix is adjusted for NaN values by replacing them with zero.
     """
-    df = pd.read_csv('../datasets/CRISPRGeneDependency.csv', delimiter=',')
+    df = pd.read_csv("../datasets/CRISPRGeneDependency.csv", delimiter=",")
     depmap = df.iloc[:, 1:]                   # Get rid of cell line names
     gene_names = depmap.columns.values        # Save gene names as np.ndarray
     corrs_matrix = depmap.corr()              # Get correlation matrix
@@ -101,7 +101,7 @@ def get_abs_corrs():
     corrs_matrix.columns = gene_names
     corrs_matrix.index = gene_names
     abs_corrs = corrs_matrix.abs()            # Absolute values
-    abs_corrs.to_csv('../datasets/abs_corrs_2.csv', index=True)
+    abs_corrs.to_csv("../datasets/abs_corrs_2.csv", index=True)
 
 
 def clean_col_names(col):
@@ -118,7 +118,7 @@ def clean_col_names(col):
     str
         Extracted gene name.
     """
-    return col.split(' (')[0]
+    return col.split(" (")[0]
 
 
 def get_genes(complex):
@@ -138,7 +138,7 @@ def get_genes(complex):
     list
         List of individual gene names.
     """
-    return complex.split(';')
+    return complex.split(";")
 
 
 def filter_CORUM():
@@ -151,125 +151,125 @@ def filter_CORUM():
         Filtered dataset of protein complexes.
     """
     # Load CORUM dataset
-    file_path = '../datasets/humanComplexes.txt'
+    file_path = "../datasets/humanComplexes.txt"
     try:
-        df = pd.read_csv(file_path, delimiter='\t')
+        df = pd.read_csv(file_path, delimiter="\t")
     except:
-        print(f'File {file_path} does not exist. Please re-download from CORUM website')
+        print(f"File {file_path} does not exist. Please re-download from CORUM website")
 
     # Select rows containing these substrings in their 'Cell line' value
-    substrings = ['T cell line ED40515',
-                  'mucosal lymphocytes',
-                  'CLL cells',
-                  'monocytes',
-                  'THP-1 cells',
-                  'bone marrow-derived',
-                  'monocytes, LPS-induced',
-                  'THP1 cells',
-                  'human blood serum',
-                  'human blood plasma',
-                  'plasma',
-                  'CSF',
-                  'human leukemic T cell JA3 cells',
-                  'erythrocytes',
-                  'peripheral blood mononuclear cells',
-                  'African Americans',
-                  'SKW 6.4',
-                  'BJAB cells',
-                  'Raji cells',
-                  'HUT78',
-                  'J16',
-                  'H9',
-                  'U-937',
-                  'Jurkat T',
-                  'NB4 cells',
-                  'U937',
-                  'early B-lineage',
-                  'T-cell leukemia',
-                  'lymphoblasts',
-                  'whole blood and lymph',
-                  'human neutrophil-differentiating HL-60 cells',
-                  'human peripheral blood neutrophils',
-                  'human neutrophils from fresh heparinized human peripheral blood',
-                  'human peripheral blood',
-                  'HCM',
-                  'liver-hematopoietic',
-                  'cerebral cortex',
-                  'human brain',
-                  'pancreatic islet',
-                  'human hepatocyte carcinoma HepG2 cells',
-                  'Neurophils',
-                  'H295R adrenocortical',
-                  'frontal cortex',
-                  'myometrium',
-                  'vascular smooth muscle cells',
-                  'Dendritic cells',
-                  'intestinal epithelial',
-                  'Primary dermal fibroblasts',
-                  'HK2 proximal',
-                  'brain pericytes',
-                  'HepG2',
-                  'HEK 293 cells, liver',
-                  'normal human pancreatic duct epithelial',
-                  'pancreatic ductal adenocarcinoma',
-                  'OKH cells',
-                  'cultured podocytes',
-                  'renal glomeruli',
-                  'VSMCs',
-                  'differentiated HL-60 cells',
-                  'SH-SY5Y cells',
-                  'frontal and entorhinal cortex',
-                  'SHSY-5Y cells',
-                  'hippocampal HT22 cells',
-                  'primary neurons',
-                  'neurons',
-                  'renal cortex membranes',
-                  'Kidney epithelial cells',
-                  'skeletal muscle cells',
-                  'Skeletal muscle fibers',
-                  'differentiated 3T3-L1',
-                  'brain cortex',
-                  'cortical and hippocampal areas',
-                  'human H4 neuroglioma',
-                  'Thalamus',
-                  'HISM',
-                  'pancreas',
-                  'RCC4',
-                  'C2C12 myotube',
-                  'XXVI muscle',
-                  'SH-SY5Y neuroblastoma',
-                  'HCC1143',
-                  'Hep-2',
-                  'PANC-1',
-                  'HEK293T cells',
-                  'HEK-293 cells',
-                  'heart',
-                  'epithelium',
-                  'kidney',
-                  'heart muscle',
-                  'central nervous system',
-                  'COS-7 cells',
-                  'ciliary ganglion',
-                  'striated muscle',
-                  'PC12',
-                  '293FR cells']
-    pattern = '|'.join(substrings)
+    substrings = ["T cell line ED40515",
+                  "mucosal lymphocytes",
+                  "CLL cells",
+                  "monocytes",
+                  "THP-1 cells",
+                  "bone marrow-derived",
+                  "monocytes, LPS-induced",
+                  "THP1 cells",
+                  "human blood serum",
+                  "human blood plasma",
+                  "plasma",
+                  "CSF",
+                  "human leukemic T cell JA3 cells",
+                  "erythrocytes",
+                  "peripheral blood mononuclear cells",
+                  "African Americans",
+                  "SKW 6.4",
+                  "BJAB cells",
+                  "Raji cells",
+                  "HUT78",
+                  "J16",
+                  "H9",
+                  "U-937",
+                  "Jurkat T",
+                  "NB4 cells",
+                  "U937",
+                  "early B-lineage",
+                  "T-cell leukemia",
+                  "lymphoblasts",
+                  "whole blood and lymph",
+                  "human neutrophil-differentiating HL-60 cells",
+                  "human peripheral blood neutrophils",
+                  "human neutrophils from fresh heparinized human peripheral blood",
+                  "human peripheral blood",
+                  "HCM",
+                  "liver-hematopoietic",
+                  "cerebral cortex",
+                  "human brain",
+                  "pancreatic islet",
+                  "human hepatocyte carcinoma HepG2 cells",
+                  "Neurophils",
+                  "H295R adrenocortical",
+                  "frontal cortex",
+                  "myometrium",
+                  "vascular smooth muscle cells",
+                  "Dendritic cells",
+                  "intestinal epithelial",
+                  "Primary dermal fibroblasts",
+                  "HK2 proximal",
+                  "brain pericytes",
+                  "HepG2",
+                  "HEK 293 cells, liver",
+                  "normal human pancreatic duct epithelial",
+                  "pancreatic ductal adenocarcinoma",
+                  "OKH cells",
+                  "cultured podocytes",
+                  "renal glomeruli",
+                  "VSMCs",
+                  "differentiated HL-60 cells",
+                  "SH-SY5Y cells",
+                  "frontal and entorhinal cortex",
+                  "SHSY-5Y cells",
+                  "hippocampal HT22 cells",
+                  "primary neurons",
+                  "neurons",
+                  "renal cortex membranes",
+                  "Kidney epithelial cells",
+                  "skeletal muscle cells",
+                  "Skeletal muscle fibers",
+                  "differentiated 3T3-L1",
+                  "brain cortex",
+                  "cortical and hippocampal areas",
+                  "human H4 neuroglioma",
+                  "Thalamus",
+                  "HISM",
+                  "pancreas",
+                  "RCC4",
+                  "C2C12 myotube",
+                  "XXVI muscle",
+                  "SH-SY5Y neuroblastoma",
+                  "HCC1143",
+                  "Hep-2",
+                  "PANC-1",
+                  "HEK293T cells",
+                  "HEK-293 cells",
+                  "heart",
+                  "epithelium",
+                  "kidney",
+                  "heart muscle",
+                  "central nervous system",
+                  "COS-7 cells",
+                  "ciliary ganglion",
+                  "striated muscle",
+                  "PC12",
+                  "293FR cells"]
+    pattern = "|".join(substrings)
 
     # Select rows whose 'Cell line' value is exactly one of these
-    exact = ['muscle', '293 cells', 'brain', 'HEK 293 cells']
+    exact = ["muscle", "293 cells", "brain", "HEK 293 cells"]
 
     # Create Boolean mask selecting all the rows described
-    partial_mask = df['Cell line'].str.contains(pattern, case=False, na=False)
-    exact_mask = df['Cell line'].isin(exact)
+    partial_mask = df["Cell line"].str.contains(pattern, case=False, na=False)
+    exact_mask = df["Cell line"].isin(exact)
     total_mask = partial_mask | exact_mask
 
     # Obtain filtered dataframe, select relevant columns, sort by 'Cell line'
     complexes_full = df[total_mask]
-    complexes = complexes_full[['ComplexID', 'ComplexName', 'Cell line', 'subunits(Gene name)', 'GO description', 'FunCat description']]
-    complexes = complexes.sort_values(by=['Cell line'])
+    complexes = complexes_full[["ComplexID", "ComplexName", "Cell line", "subunits(Gene name)", "GO description", "FunCat description"]]
+    complexes = complexes.sort_values(by=["Cell line"])
 
-    # Exclude 'complexes' including only one subunit/ gene
-    mask_mono = [len(complexes['subunits(Gene name)'].values[i].split(';')) > 1 for i in range(len(complexes))]
+    # Exclude those complexes including only one subunit/ gene
+    mask_mono = [len(complexes["subunits(Gene name)"].values[i].split(";")) > 1 for i in range(len(complexes))]
     complexes = complexes.loc[mask_mono]
     return complexes
 
@@ -288,15 +288,15 @@ def load_CORUM():
     --------
     >>> complexes = load_CORUM()
     >>> print(complexes[0])
-    ['GeneA', 'GeneB', 'GeneC']
+    ["GeneA", "GeneB", "GeneC"]
     """
-    file_path = '../datasets/filtered_complexes.csv'
+    file_path = "../datasets/filtered_complexes.csv"
     try:
         df = pd.read_csv(file_path)
         complexes_strings = df['subunits(Gene name)'].values
-        complexes = [complex.split(';') for complex in complexes_strings]
+        complexes = [complex.split(";") for complex in complexes_strings]
     except:
-        print(f'File {file_path} does not exist. Please run filter_CORUM().')
+        print(f"File {file_path} does not exist. Please run filter_CORUM().")
         complexes = None
     return complexes
 
@@ -449,12 +449,12 @@ def edge_density_ratio(g, internal_mask, external_mask):
     eed = n_external_edges / possible_external_edges
 
     # Return edge density ratio = IED / EED
-    return ied / eed if eed != 0 else float('inf')
+    return ied / eed if eed != 0 else float("inf")
 
 
 def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
     """
-    Performs a single random rewiring of edges in a graph and calculates the Edge Density Ratio (EDR).
+    Generates a randomised graph instance from the configuration model and calculates the Edge Density Ratio (EDR).
 
     The function simulates rewiring by randomly connecting internal nodes with each other or with external nodes
     based on their degree distribution. It ensures that each stub from an internal node connects to another node
@@ -531,94 +531,132 @@ def single_rewiring(internal_nodes, external_nodes, degrees, progress_list):
 
     ied = N_int / possible_internal_edges
     eed = N_ext / possible_external_edges
-    edr = ied / eed if eed != 0 else float('inf')
+    edr = ied / eed if eed != 0 else float("inf")
 
     progress_list.append(1)    # Track progress for multiprocessing
     return edr
 
 
 def simulate_rewiring(g, internal_nodes, num_iterations=1000):
-    '''
-    :param g: graph-tool Graph object
-    :param internal_vertices: list of node indices that are internal to the complex
-    :param num_iterations: number of rewirings
-    :return: Observed edge density ratio (EDR) for the complex given g,
-             p value of the observed EDR against the null distribution
-             ratios: list containing the EDR of the null distribution samples
-    '''
-    # Get list of external nodes to call 'single_rewiring()'
+    """
+    Calls `single_rewiring()` multiple times, constructing a null distribution for the Edge
+    Density Ratio (EDR) and assessing the statistical significance of the observed EDR.
+
+    Parameters
+    ----------
+    g : graph_tool.Graph
+        The graph-tool Graph object representing the genes.
+    internal_nodes : list of int
+        List of node indices that are internal to the complex of interest.
+    num_iterations : int, optional
+        Number of random rewirings to perform. Default is 1000.
+
+    Returns
+    -------
+    observed : float
+        Observed EDR for the given complex in the original graph.
+    p_value : float
+        Statistical significance of the observed EDR against the null distribution.
+    ratios : list of float
+        Null distribution of EDR values from rewiring simulations.
+
+    Examples
+    --------
+    >>> observed, p_value, ratios = simulate_rewiring(g, [0, 1, 2, 4], num_iterations=2000)
+    """
+    # Get list of external nodes to call `single_rewiring()`
     n_total = g.num_vertices()
     set_internal = set(internal_nodes)
     set_external = set(range(n_total)) - set_internal
     external_nodes = list(set_external)
 
-    # Keep track of original degree sequence
+    # Save original node degree sequence
     degrees = {int(v): v.out_degree() for v in g.vertices()}
 
-    # Call 'single_rewiring()' parallelising the process
+    # Call `single_rewiring()` parallelising the process
     with Manager() as manager:
         progress_list = manager.list()
         with Pool(processes=40, initializer=init_worker) as pool:
             results = [pool.apply_async(single_rewiring, args=(internal_nodes, external_nodes, degrees, progress_list)) for _ in range(num_iterations)]
-
-            # Get results from all iterations
             ratios = [result.get() for result in results]
 
-    # Create masks needed to call 'edge_density_ratio()'
-    internal_mask = g.new_vertex_property('bool')
-    external_mask = g.new_vertex_property('bool')
+    # Create masks needed to call `edge_density_ratio()`
+    internal_mask = g.new_vertex_property("bool")
+    external_mask = g.new_vertex_property("bool")
     for v in g.vertices():
         idx = int(v)
         internal_mask[v] = idx in internal_nodes
         external_mask[v] = idx in list(set_external)
 
-    # Get observed EDR
+    # Compute observed EDR from original graph
     observed = edge_density_ratio(g, internal_mask, external_mask)
     ratios.append(observed)
 
-    # Calculate the p value
+    # Compute the p-value
     p_value = np.mean([r >= observed for r in ratios])
+    
     return observed, p_value, ratios
 
 
 def edge_density(g):
-    '''Returns global edge density of a Graph instance'''
+    """
+    Computes the global edge density of a graph.
+
+    Parameters
+    ----------
+    g : graph_tool.Graph
+        Input graph-tool Graph object.
+
+    Returns
+    -------
+    float
+        Edge density, defined as the ratio of the number of edges over the total
+        number of possible edges.
+    """
     return g.num_edges() / (g.num_vertices() * (g.num_vertices() - 1) / 2)
 
 
 def plot_edgestats_per_threshold(n_points=100):
-    # Array of thresholds to plot
+    """
+    Plots edge density and number of edges as a function of the threshold used to construct the graph.
+
+    The function iterates over different threshold values, constructs a graph for each, computes the edge
+    density and number of edges, and then generates two plots: one for edge density and another for edge count.
+
+    Parameters
+    ----------
+    n_points : int, optional
+        Number of threshold values to test. Default is 100.
+    """
     thresholds = np.arange(0, 1, 1 / n_points)
 
-    # Parallelise the creation of the graph objects
+    # Parallelise the graph creation
     with Pool(processes=40) as pool:
         results = [pool.apply_async(prep_graph, args=(threshold, False)) for threshold in thresholds]
         gs = [result.get() for result in results]
 
-    # Obtain the density of each graph
+    # Save statistics
     densities = [edge_density(g) for g in gs]
     numbers_edges = [g.num_edges() for g in gs]
 
     # Plotting settings
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.rcParams.update({'font.size': 23})
+    plt.rc("text", usetex=True)
+    plt.rc("font", family="serif")
+    plt.rcParams.update({"font.size": 23})
 
     # Plot
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
-
-    # Create axes
     ax[0].plot(thresholds, densities)
-    ax[0].set_title('Edge density vs threshold')
-    ax[0].set_xlabel('Threshold')
-    ax[0].set_ylabel('Edge density')
+    ax[0].set_title("Edge density vs threshold")
+    ax[0].set_xlabel("Threshold")
+    ax[0].set_ylabel("Edge density")
     ax[0].grid(True)
 
     ax[1].plot(thresholds, numbers_edges)
-    ax[1].set_title('Edge number vs threshold')
-    ax[1].set_xlabel('Threshold')
-    ax[1].set_ylabel('Edge number')
-    ax[1].set_yscale('log')
+    ax[1].set_title("Edge number vs threshold")
+    ax[1].set_xlabel("Threshold")
+    ax[1].set_ylabel("Edge number")
+    ax[1].set_yscale("log")
     ax[1].grid(True)
 
     plt.tight_layout()
@@ -626,30 +664,47 @@ def plot_edgestats_per_threshold(n_points=100):
 
 
 def hist_num_genes(threshold):
+    """
+    Plots a histogram of the number of genes per significant complex at a given threshold.
+
+    This function loads a results file, extracts the number of genes for statistically significant
+    and non-significant complexes, and generates a histogram.
+
+    Parameters
+    ----------
+    threshold : float
+        The correlation threshold used in the analysis.
+    """
     # Plotting settings
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.rcParams.update({'font.size': 21})
+    plt.rc("text", usetex=True)
+    plt.rc("font", family="serif")
+    plt.rcParams.update({"font.size": 21})
 
     # Open the relevant results dataset
     number = str(threshold)[2:]
-    df = pd.read_csv(f'results/results_{number}.csv')
-    significant_df = df[df['Significant (BY)']]
-    significant = significant_df['# genes'].values
+    try:
+        df = pd.read_csv(f"results/results_{number}.csv")
+    except FileNotFoundError as e:
+        print(f"Error: The file 'results/results_{number}.csv' was not found.")
+        print("Please run 'fraction_complexes.py' in this directory to generate the required file.")
+
+    # Extract gene counts
+    significant_df = df[df["Significant (BY)"]]
+    significant = significant_df["# genes"].values
     bins_significant = int(max(significant) - min(significant))
 
-    nonsignificant_df = df[df['Significant (BY)'] == 0]
-    nonsignificant = nonsignificant_df['# genes'].values
+    nonsignificant_df = df[df["Significant (BY)"] == 0]
+    nonsignificant = nonsignificant_df["# genes"].values
     bins_nonsignificant = int(max(nonsignificant) - min(nonsignificant))
 
-    # Create plot
+    # Create histogram
     fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-    ax.hist(nonsignificant, bins=bins_nonsignificant, color='blue', alpha=0.4, label='Non-significant complexes')
-    ax.hist(significant, bins=bins_significant, color='orange', alpha=0.6, label='Significant complexes')
-    ax.set_title(f'Histogram of number of genes (threshold = {threshold})')
-    ax.set_xlabel('Number of genes')
-    ax.set_ylabel('Frequency')
-    ax.set_yscale('log')
+    ax.hist(nonsignificant, bins=bins_nonsignificant, color="blue", alpha=0.4, label="Non-significant complexes")
+    ax.hist(significant, bins=bins_significant, color="orange", alpha=0.6, label="Significant complexes")
+    ax.set_title(f"Histogram of number of genes (threshold = {threshold})")
+    ax.set_xlabel("Number of genes")
+    ax.set_ylabel("Frequency")
+    ax.set_yscale("log")
     ax.xaxis.set_ticks(np.arange(min(min(significant), min(nonsignificant)), max(max(significant), max(nonsignificant))+1, 4))
     ax.legend()
 
@@ -658,18 +713,54 @@ def hist_num_genes(threshold):
 
 
 def fraction_found_complexes(threshold):
-    # Open the relevant results dataset
-    number = str(threshold)[2:]
-    df = pd.read_csv(f'results_abs/results_{number}.csv')
+    """
+    Computes the fraction of complexes identified as significant for a given threshold.
 
-    # Obtain fraction of successfully found complexes
-    return len(df[df['Significant']]) / len(df)
+    The function loads a dataset corresponding to the given threshold and calculates the
+    fraction of complexes that have been marked as statistically significant.
+
+    Parameters
+    ----------
+    threshold : float
+        The correlation threshold used for filtering significant edges in the creation of the graph.
+
+    Returns
+    -------
+    float
+        The fraction of complexes that were found to be significant.
+    """
+    number = str(threshold)[2:]
+    df = pd.read_csv(f"results_abs/results_{number}.csv")
+
+    return len(df[df["Significant"]]) / len(df)
 
 
 def adapt_df(df):
-    df = df.rename(columns={'Significant': 'Significant (BY)', 'Corrected pval': 'corrected pval (BY)'})
-    reject, corrected, _, _ = multipletests(df['pval'].values, alpha=0.05, method='fdr_bh')
-    df['Significant (BH)'] = reject
-    df['corrected pval (BH)'] = corrected
-    df = df[['ComplexID', 'Cell line', 'subunits(Gene name)', 'pval', 'corrected pval (BY)', 'Significant (BY)', 'corrected pval (BH)', 'Significant (BH)', 'Observed ratio', '# genes', 'All genes present', 'Null ratios']]
+    """
+    Adapts a dataframe by renaming columns and applying multiple hypothesis testing correction.
+
+    The function modifies the dataframe to include both Benjamini-Yekutieli (BY) and
+    Benjamini-Hochberg (BH) corrections for multiple hypothesis testing.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input dataframe containing p-values and significance information.
+
+    Returns
+    -------
+    pd.DataFrame
+        A modified dataframe with adjusted p-values and significance labels.
+    """
+    # Rename columns to indicate the correction method
+    df = df.rename(columns={"Significant": "Significant (BY)", "Corrected pval": "corrected pval (BY)"})
+
+    # Apply Benjamini-Hochberg correction
+    reject, corrected, _, _ = multipletests(df["pval"].values, alpha=0.05, method="fdr_bh")
+    df["Significant (BH)"] = reject
+    df["corrected pval (BH)"] = corrected
+
+    # Select and reorder relevant columns
+    df = df[["ComplexID", "Cell line", "subunits(Gene name)", "pval", "corrected pval (BY)", "Significant (BY)",
+             "corrected pval (BH)", "Significant (BH)", "Observed ratio", "# genes", "All genes present", "Null ratios"]]
     return df
