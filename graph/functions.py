@@ -733,34 +733,3 @@ def fraction_found_complexes(threshold):
     df = pd.read_csv(f"results_abs/results_{number}.csv")
 
     return len(df[df["Significant"]]) / len(df)
-
-
-def adapt_df(df):
-    """
-    Adapts a dataframe by renaming columns and applying multiple hypothesis testing correction.
-
-    The function modifies the dataframe to include both Benjamini-Yekutieli (BY) and
-    Benjamini-Hochberg (BH) corrections for multiple hypothesis testing.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        The input dataframe containing p-values and significance information.
-
-    Returns
-    -------
-    pd.DataFrame
-        A modified dataframe with adjusted p-values and significance labels.
-    """
-    # Rename columns to indicate the correction method
-    df = df.rename(columns={"Significant": "Significant (BY)", "Corrected pval": "corrected pval (BY)"})
-
-    # Apply Benjamini-Hochberg correction
-    reject, corrected, _, _ = multipletests(df["pval"].values, alpha=0.05, method="fdr_bh")
-    df["Significant (BH)"] = reject
-    df["corrected pval (BH)"] = corrected
-
-    # Select and reorder relevant columns
-    df = df[["ComplexID", "Cell line", "subunits(Gene name)", "pval", "corrected pval (BY)", "Significant (BY)",
-             "corrected pval (BH)", "Significant (BH)", "Observed ratio", "# genes", "All genes present", "Null ratios"]]
-    return df
