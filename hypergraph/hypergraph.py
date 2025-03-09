@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import Tuple, List
 import networkx as nx
 import graph_tool.all as gt
@@ -100,8 +99,8 @@ def map_pathway_to_nodes() -> pd.DataFrame:
     pathway_to_genes = pathway_to_genes[
                            [len(genes) > 1 for genes in pathway_to_genes["Genes"].values]].reset_index().iloc[:, 1:]
     # Add "unmapped" and "unknown" to the DF
-    pathway_to_genes.loc[len(pathway_to_genes)] = pd.Series({"Pathway": "No pathway", "Genes": unmapped_list})
-    pathway_to_genes.loc[len(pathway_to_genes)] = pd.Series({"Pathway": "Unknown pathway", "Genes": unknown_list})
+    pathway_to_genes.loc[len(pathway_to_genes)] = pd.Series({"Pathway": "no_pathway", "Genes": unmapped_list})
+    pathway_to_genes.loc[len(pathway_to_genes)] = pd.Series({"Pathway": "unknown_pathway", "Genes": unknown_list})
 
     # Add node indices
     nodes = []
@@ -198,7 +197,7 @@ def optimal_spectral_clustering(A: np.ndarray, max_clusters: int = 20) -> int:
     degrees = np.array(A.sum(axis=1)).flatten()
     D = np.diag(degrees)    # Degree matrix
     L = D - A               # Laplacian matrix
-    eigvals, _ = scipy.sparse.linalg.eigsh(L, k=max_clusters, which="SM")
+    eigvals, _ = scipy.sparse.linalg.eigsh(L.astype(float), k=max_clusters, which="SM")
     eigengaps = np.diff(eigvals)
     optimal_clusters = np.argmax(eigengaps) + 1
     return optimal_clusters
@@ -312,44 +311,14 @@ def extract_hyperedges(clusters, prefix=""):
     return results
 
 
-def found_fraction_vs_threshold():
-    # Plotting settings
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.rcParams.update({'font.size': 21})
-
-    ns = [5, 6, 7, 8, 85, 9, 95, 96, 97, 98, 99]
-    thresholds = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.96, 0.97, 0.98, 0.99]
-    fractions = []
-    fractions_wo = []
-
-    for idx, n in enumerate(ns):
-        df = pd.read_csv(f'./../1_graph/results_{str(n)}.csv')
-        df_filt = df[df['Significant']]
-        fraction = 100 * len(df_filt) / len(df)
-        df_wo = df[df['Number of genes'] > 6]
-        fraction_wo = 100 * len(df_filt) / len(df_wo)
-        fractions.append(fraction)
-        fractions_wo.append(fraction_wo)
-
-    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
-    ax.plot(thresholds, fractions, label='All complexes')
-    ax.plot(thresholds, fractions_wo, label='Complexes with $\geq$ 6 nodes')
-    ax.set_title('Fraction of found complexes per threshold')
-    ax.set_xlabel('Thresholds')
-    ax.set_ylabel('Percentage')
-    ax.legend()
-
-    plt.tight_layout()
-    plt.show()
-
-
 if __name__ == "__main__":
     # Load graph
     g = prep_graph_networkx(0.2)
 
     # Map pathways
+    print("mapping pathway to nodes")
     pathway_df = map_pathway_to_nodes()
+    print("creating subgraphs")
     pathway_subgraphs = create_subgraphs(g, pathway_df)
 
     # Initialise dictionary for storing hyperedges
@@ -367,15 +336,43 @@ if __name__ == "__main__":
         else:
             clusters = {pathway: subgraph}
 
+        print("extracting hyperedges")
         hyperedges = extract_hyperedges(clusters)
         all_hyperedges[pathway] = hyperedges
         all_pathways = None
 
+    results = []
+
     for pathway, hyperedge_dict in all_hyperedges.items():
         for label, edges in hyperedge_dict.items():
-            file_path = f"hyperedges/{pathway}_cluster_{label}.csv"
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, mode="w", newline="") as file:
-                writer = csv.writer(file)
-                for edge in edges:
-                    writer.writerow(edge)
+
+            try:
+                int_label = int(label)
+                pathway_name = f"no_pathway_{int_label}"
+            except ValueError:
+                pathway_name = pathway
+
+            node_indices = pathway_df[pathway_df["Pathway"] == pathway]["Nodes"].values[0]
+
+            gene_names = pathway_df[pathway_df["Pathway"] == pathway]["Genes"].values[0]
+
+            # Store data
+            results.append([
+                pathway_name,  # Pathway Name
+                ", ".join(gene_names),  # Gene (Subunit) Names
+                str(node_indices),  # Node Indices
+                len(node_indices),  # Number of Nodes
+                str(edges),  # Hyperedges
+                len(edges)  # Number of Hyperedges
+            ])
+
+        # Convert to DataFrame
+        df_final = pd.DataFrame(results, columns=[
+            "Pathway Name", "Gene Names", "Node Indices",
+            "Number of Nodes", "Hyperedges", "Number of Hyperedges"
+        ])
+        
+        # Save to CSV
+        output_file = os.path.join(data_path, "hyperedges_final.csv")
+        df_final.to_csv(output_file, index=False)
+
