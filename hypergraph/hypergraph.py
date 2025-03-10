@@ -374,7 +374,7 @@ if __name__ == "__main__":
                 ", ".join(gene_names),  # Gene (Subunit) Names
                 str(node_indices),      # Node Indices
                 len(node_indices),      # Number of Nodes
-                str(hyperedges_names),  # Hyperedges (gene names)
+                str(hyperedge_names),   # Hyperedges (gene names)
                 str(edges),             # Hyperedges (node indices)
                 len(edges)              # Number of Hyperedges
             ])
