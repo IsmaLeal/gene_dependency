@@ -368,7 +368,7 @@ if __name__ == "__main__":
 
         # Convert to DataFrame
         df_final = pd.DataFrame(results, columns=[
-            "Pathway Name", "Gene Names", "Node Indices",
+            "Pathway", "Gene Names", "Nodes",
             "Number of Nodes", "Hyperedges", "Number of Hyperedges"
         ])
         
