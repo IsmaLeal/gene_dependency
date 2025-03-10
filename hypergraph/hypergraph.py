@@ -7,24 +7,17 @@ import graph_tool.all as gt
 from graph_tool.inference import CliqueState
 from sklearn.cluster import SpectralClustering
 from tqdm import tqdm
-import time
-import csv
 import scipy.sparse
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Configuration
-data_path = "../datasets/"
-threshold = 0.2
-num_clusters = 3
-mcmc_sweeps = 1000
 
 # Preprocessing functions
 def clean_col_names(col: str) -> list[str]:
     """Extracts gene names from a label formatted as 'GeneName (GeneID)'."""
-    return col.split(' (')[0]
+    return col.split(" (")[0]
 
 def prep_graph_networkx(threshold: float = threshold) -> nx.Graph:
     """
@@ -197,13 +190,19 @@ def optimal_spectral_clustering(A: np.ndarray, max_clusters: int = 20) -> int:
     degrees = np.array(A.sum(axis=1)).flatten()
     D = np.diag(degrees)    # Degree matrix
     L = D - A               # Laplacian matrix
+
     eigvals, _ = scipy.sparse.linalg.eigsh(L.astype(float), k=max_clusters, which="SM")
     eigengaps = np.diff(eigvals)
-    optimal_clusters = np.argmax(eigengaps) + 1
+
+    sorted_indices = np.argsort(eigengaps)[::-1]
+
+    optimal_clusters = sorted_indices[0] + 1
+    if optimal_clusters == 1 and len(sorted_indices) > 1:
+        optimal_clusters = sorted_indices[1] + 1
     return optimal_clusters
 
 
-def iterative_spectral_clustering(graph: nx.Graph, max_size: int = 1300) -> dict:
+def iterative_spectral_clustering(graph: nx.Graph, max_size: int = 1300, depth: int = 0) -> dict:
     """
     Recursively applies spectral clustering on large clusters.
 
@@ -217,6 +216,8 @@ def iterative_spectral_clustering(graph: nx.Graph, max_size: int = 1300) -> dict
         The maximum number of nodes allowed per cluster. If a cluster exceeds this size,
         it will be recursively split into smaller clusters. All clusters contain fewer than
         this many nodes. Default is 1300.
+    depth : int, optional
+        Current recursion depth. Default is 0.
 
     Returns
     -------
@@ -233,7 +234,7 @@ def iterative_spectral_clustering(graph: nx.Graph, max_size: int = 1300) -> dict
         nodes = [node for i, node in enumerate(graph.nodes()) if clustering[i] == label]
         subgraph = graph.subgraph(nodes).copy()
         if len(nodes) > max_size:
-            clusters[label] = iterative_spectral_clustering(subgraph, max_size)
+            clusters[label] = iterative_spectral_clustering(subgraph, max_size, depth + 1)
         else:
             clusters[label] = subgraph
     return clusters
@@ -312,13 +313,20 @@ def extract_hyperedges(clusters, prefix=""):
 
 
 if __name__ == "__main__":
+    # Configuration
+    data_path = "../datasets/"
+    threshold = 0.2
+    num_clusters = 3
+    mcmc_sweeps = 1000
+    
     # Load graph
-    g = prep_graph_networkx(0.2)
+    g = prep_graph_networkx(threshold)
+
+    genes = pd.read_csv(os.path.join(data_path, "names.txt"), header=None)[0]
+    idx_to_gene = {idx: name for idx, name in enumerate(genes)}
 
     # Map pathways
-    print("mapping pathway to nodes")
     pathway_df = map_pathway_to_nodes()
-    print("creating subgraphs")
     pathway_subgraphs = create_subgraphs(g, pathway_df)
 
     # Initialise dictionary for storing hyperedges
@@ -327,16 +335,17 @@ if __name__ == "__main__":
     all_num_hyperedges = {}
     all_num_nodes = {}
 
+    max_size = 1300
+
     for pathway, subgraph in pathway_subgraphs.items():
         logging.info(f"Processing pathway: {pathway}")
 
         # Apply spectral clustering only to pathways large enough to be subdivided
-        if subgraph.number_of_nodes() > 1300:
-            clusters = iterative_spectral_clustering(subgraph)
+        if subgraph.number_of_nodes() > max_size:
+            clusters = iterative_spectral_clustering(subgraph, max_size=max_size)
         else:
             clusters = {pathway: subgraph}
 
-        print("extracting hyperedges")
         hyperedges = extract_hyperedges(clusters)
         all_hyperedges[pathway] = hyperedges
         all_pathways = None
@@ -345,7 +354,6 @@ if __name__ == "__main__":
 
     for pathway, hyperedge_dict in all_hyperedges.items():
         for label, edges in hyperedge_dict.items():
-
             try:
                 int_label = int(label)
                 pathway_name = f"no_pathway_{int_label}"
@@ -353,23 +361,28 @@ if __name__ == "__main__":
                 pathway_name = pathway
 
             node_indices = pathway_df[pathway_df["Pathway"] == pathway]["Nodes"].values[0]
-
             gene_names = pathway_df[pathway_df["Pathway"] == pathway]["Genes"].values[0]
+
+            # Add gene names for each hyperedge too
+            hyperedge_names = [
+                tuple(idx_to_gene[node] for node in edge) for edge in edges
+            ]
 
             # Store data
             results.append([
-                pathway_name,  # Pathway Name
+                pathway_name,           # Pathway Name
                 ", ".join(gene_names),  # Gene (Subunit) Names
-                str(node_indices),  # Node Indices
-                len(node_indices),  # Number of Nodes
-                str(edges),  # Hyperedges
-                len(edges)  # Number of Hyperedges
+                str(node_indices),      # Node Indices
+                len(node_indices),      # Number of Nodes
+                str(hyperedges_names),  # Hyperedges (gene names)
+                str(edges),             # Hyperedges (node indices)
+                len(edges)              # Number of Hyperedges
             ])
 
         # Convert to DataFrame
         df_final = pd.DataFrame(results, columns=[
-            "Pathway", "Gene Names", "Nodes",
-            "Number of Nodes", "Hyperedges", "Number of Hyperedges"
+            "Pathway", "Gene Names", "Nodes", "Number of Nodes",
+            "Hyperedges (genes)", "Hyperedges (indices)", "Number of Hyperedges"
         ])
         
         # Save to CSV
