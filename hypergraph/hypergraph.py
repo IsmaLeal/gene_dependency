@@ -5,6 +5,7 @@ from typing import Tuple, List
 import networkx as nx
 import graph_tool.all as gt
 from graph_tool.inference import CliqueState
+from scipy.sparse import csr_matrix
 from sklearn.cluster import SpectralClustering
 from tqdm import tqdm
 import scipy.sparse
@@ -19,7 +20,7 @@ def clean_col_names(col: str) -> list[str]:
     """Extracts gene names from a label formatted as 'GeneName (GeneID)'."""
     return col.split(" (")[0]
 
-def prep_graph_networkx(threshold: float = threshold) -> nx.Graph:
+def prep_graph_networkx(threshold: float = 0.2) -> nx.Graph:
     """
     Loads correlation data, applies threshold, and returns a NetworkX graph.
 
@@ -28,9 +29,9 @@ def prep_graph_networkx(threshold: float = threshold) -> nx.Graph:
 
     Parameters
     ----------
-    threshold : float
+    threshold : float, optional
         Value between 0 and 1. Gene pairs with an absolute correlation above the given
-        threshold will be represented as nodes that share an edge.
+        threshold will be represented as nodes that share an edge. Default is 0.2.
 
     Returns
     -------
@@ -38,11 +39,17 @@ def prep_graph_networkx(threshold: float = threshold) -> nx.Graph:
         Graph object representing gene dependency.
     """
     logging.info("Preparing graph...")
-    corrs = pd.read_csv(os.path.join(data_path, "abs_corrs.csv"), delimiter=",", index_col=0)
+    corrs = safe_read_csv(os.path.join(data_path, "abs_corrs.csv"), delimiter=",", index_col=0)
     corrs /= np.max(corrs.values)
+    
     gene_names = np.array([clean_col_names(col) for col in corrs.columns])  # Remove gene IDs
-    A = (corrs.values > threshold).astype(np.int8)  # Adjacency matrix
-    g = nx.from_numpy_array(A)
+
+    # Use sparse matrix for adjacency matrix
+    A = csr_matrix((corrs.values > threshold).astype(np.int8))
+    g = nx.from_scipy_sparse_array(A)
+    #A = (corrs.values > threshold).astype(np.int8)
+    #g = nx.from_numpy_array(A)
+    
     nx.set_node_attributes(g, {i: gene_names[i] for i in range(len(gene_names))}, "name")   # Add gene names
     return g
 
@@ -55,7 +62,7 @@ def map_pathway_to_nodes() -> pd.DataFrame:
     - "Unmapped": includes all genes with either NaN pathways or belonging to a single-gene pathway.
     - "Unknown": includes all genes from CRISPR not belonging to the UniProt dataset.
     """
-    genes = pd.read_csv(os.path.join(data_path, "names.txt"), header=None)[0]
+    genes = safe_read_csv(os.path.join(data_path, "names.txt"), header=None)[0]
     gene_to_index = {name: idx for idx, name in enumerate(genes)}
 
     dfs = []
@@ -137,6 +144,27 @@ def create_subgraphs(g: nx.Graph, pathway_df: pd.DataFrame) -> dict:
     return subgraphs
 
 
+# Utility functions
+def safe_read_csv(filepath, **kwargs)
+    """
+    Reads a CSV file safely, returning an empty DataFrame if the file is missing.
+
+    Parameters
+    ----------
+    filepath : str
+        The path of the file to read as a Pandas DataFrame object.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame contained on `filepath`, or empty DataFrame if file is missing.
+    """
+    if not os.path.exists(filepath):
+        logging.warning(f"File not found: {filepath}")
+        return pd.DataFrame()
+    return pd.read_csv(filepath, **kwargs)
+
+
 def nx_to_gt(graph: nx.Graph) -> gt.Graph:
     """
     Takes NetworkX Graph object and returns a graph-tool Graph.
@@ -171,6 +199,7 @@ def nx_to_gt(graph: nx.Graph) -> gt.Graph:
     return gt_graph
 
 
+# Spectral clustering functions
 def optimal_spectral_clustering(A: np.ndarray, max_clusters: int = 20) -> int:
     """
     Determines the optimal number of clusters using the largest eigengap.
@@ -226,13 +255,19 @@ def iterative_spectral_clustering(graph: nx.Graph, max_size: int = 1300, depth: 
         sub-dictionaries with more clusters, while others contain subgraphs that are not further split.
     """
     A = nx.adjacency_matrix(graph).toarray()
+
+    # Determine the optimal number of clusters using eigengaps
     n_clusters = optimal_spectral_clustering(A)
+
+    # Apply spectral clustering
     clustering = SpectralClustering(n_clusters=n_clusters, affinity="precomputed").fit_predict(A)
 
     clusters = {}
     for label in np.unique(clustering):
         nodes = [node for i, node in enumerate(graph.nodes()) if clustering[i] == label]
         subgraph = graph.subgraph(nodes).copy()
+
+        # Recursively split large subgraphs
         if len(nodes) > max_size:
             clusters[label] = iterative_spectral_clustering(subgraph, max_size, depth + 1)
         else:
@@ -240,6 +275,7 @@ def iterative_spectral_clustering(graph: nx.Graph, max_size: int = 1300, depth: 
     return clusters
 
 
+# Hypergraph obtention functions
 def get_cliques_from_subgraph(graph: gt.Graph) -> List[Tuple]:
     """
     Extracts hyperedges from a graph-tool subgraph using CliqueState.
@@ -313,7 +349,7 @@ def extract_hyperedges(clusters, prefix=""):
 
 
 if __name__ == "__main__":
-    # Configuration
+    # Configuration and parameters
     data_path = "../datasets/"
     threshold = 0.2
     num_clusters = 3
@@ -322,7 +358,7 @@ if __name__ == "__main__":
     # Load graph
     g = prep_graph_networkx(threshold)
 
-    genes = pd.read_csv(os.path.join(data_path, "names.txt"), header=None)[0]
+    genes = safe_read_csv(os.path.join(data_path, "names.txt"), header=None)[0]
     idx_to_gene = {idx: name for idx, name in enumerate(genes)}
 
     # Map pathways
@@ -338,7 +374,7 @@ if __name__ == "__main__":
     max_size = 1300
 
     for pathway, subgraph in pathway_subgraphs.items():
-        logging.info(f"Processing pathway: {pathway}")
+        logging.info(f"📌 Processing pathway: {pathway} ({subgraph.number_of_nodes()} nodes, {subgraph.number_of_edges()} edges)")
 
         # Apply spectral clustering only to pathways large enough to be subdivided
         if subgraph.number_of_nodes() > max_size:
