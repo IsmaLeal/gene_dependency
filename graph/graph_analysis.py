@@ -1,14 +1,16 @@
+import os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from data_processing.corum import load_CORUM
 from statsmodels.stats.multitest import multipletests
-from functions import prep_graph, load_CORUM, check_genes_presence, simulate_rewiring, adapt_df
+from graph_utils import create_graph_gt, check_genes_presence, simulate_rewiring
 
 
 def process_complex(complex, gene_names, g, num_iterations=10000):
     """
     Processes a CORUM complex: checks gene presence in CRISPR, simulates rewiring, and calculates EDR.
-    
+
     Parameters
     ----------
     complex : list of str
@@ -19,7 +21,7 @@ def process_complex(complex, gene_names, g, num_iterations=10000):
      	The constructed gene dependency graph.
      num_iterations : int, optional
      	Number of random rewirings for null distribution. Default is 10000.
-    
+
     Returns
     -------
     tuple
@@ -31,7 +33,7 @@ def process_complex(complex, gene_names, g, num_iterations=10000):
     CRISPR dataset.
     """
     names = check_genes_presence(complex, gene_names)
-    
+
     # Check if all genes are present in the CRISPR dataset
     all_genes_present = int(len(names) == len(complex))
     if len(names) <= 1:
@@ -42,26 +44,29 @@ def process_complex(complex, gene_names, g, num_iterations=10000):
 
     # Simulate rewirings and compute the EDR for this complex, its p-value, and the null distribution of EDRs
     edr, p_value, null_distr = simulate_rewiring(g, internal_nodes, num_iterations)
-    
+
     return (edr, p_value, null_distr, len(names), all_genes_present)
 
 
 def process_all_complexes(threshold=0.20, num_iterations=10000):
     """
     Loads the CORUM complexes and CRISPR dataset, constructs the graph, and processes all complexes.
-    
+
+    This function requires that `get_abs_corrs()` and `filter_CORUM()` are run first. These functions
+    are located in `../general/utils.py`.
+
     Parameters
     ----------
     threshold : float, optional
     	The correlation threshold for edge filtering in the graph. Default is 0.20.
     num_iterations : int, optional
     	Number of rewiring iterations for null distribution. Default is 10000.
-    
+
     Returns
     -------
     df : pd.DataFrame
     	A dataframe containing processed results for each CORUM complex of interest. Columns:
-     
+
      	- complexID (int): Unique identifier for the complex.
         - cell_line (str): The cell line associated with the complex.
 	- subunits(Gene name) (str): Names of genes in the complex.
@@ -74,28 +79,47 @@ def process_all_complexes(threshold=0.20, num_iterations=10000):
      	- num_genes (int): Number of genes present in the dataset for this complex.
       	- all_genes_present (bool): True if all genes in the CORUM complex are found in the CRISPR dataset.
        	- null_ratios (str): A string representation of a list with the null distribution of EDR values.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the files `../datasets/abs_corrs.csv` and `../datasets/filtered_complexes.csv` are not found.
     """
+    # Check if the preprocessed complexes and correlations exist
+    missing_files = [
+        f for f in [
+            "../datasets/abs_corrs.csv",
+            "../datasets/filtered_complexes.csv"
+        ] if not os.path.exists(f)
+    ]
+    if missing_files:
+        raise FileNotFoundError(
+            f"Required preprocessing steps missing.\n"
+            f"Run `get_abs_corrs()` and `filter_CORUM()` from `../general/utils.py` first.\n"
+            f"Missing files: {missing_files}"
+        )
+
     # Load dataset and preprocessed complexes
     df = pd.read_csv("../datasets/filtered_complexes.csv")
     complexes = load_CORUM()
-    
+
     # Create graph from rank-normalised correlation matrix
-    g = prep_graph(threshold, ranked=False)
+    g = create_graph_gt(threshold, ranked=False)
     gene_names = np.array(g.vertex_properties["names"])
-    
+
     # Prepare lists to store results
     results = [process_complex(complex, gene_names, g, num_iterations) for complex in tqdm(complexes)]
-    
+
     # Unpack results
     observed_edrs, p_values, null_distributions, n_genes, all_genes = zip(*results)
-    
+
     # Add results to dataframe
     df["all_genes_present"] = all_genes
     df["observed_edr"] = observed_edrs
     df["pval"] = p_values
     df["null_ratios"] = null_distributions
     df["num_genes"] = n_genes
-    
+
     # Remove complexes that couldn't be processed
     df = df.dropna()
 
@@ -109,7 +133,7 @@ def process_all_complexes(threshold=0.20, num_iterations=10000):
 
     # Reorder columns
     df = df[["complexID", "cell_line", "subunits(Gene name)", "pval", "corrected_pval_by", "significant_by",
-             "corrected_pval_bh", "significant_bh", "observed_edr", "num_genes", "all_genes_present", "null_ratios"]]    
+             "corrected_pval_bh", "significant_bh", "observed_edr", "num_genes", "all_genes_present", "null_ratios"]]
     return df
 
 
