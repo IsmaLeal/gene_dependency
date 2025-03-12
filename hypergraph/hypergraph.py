@@ -397,7 +397,6 @@ if __name__ == "__main__":
                 pathway_name = pathway
 
             node_indices = pathway_df[pathway_df["Pathway"] == pathway]["Nodes"].values[0]
-            gene_names = pathway_df[pathway_df["Pathway"] == pathway]["Genes"].values[0]
 
             # Add gene names for each hyperedge too
             hyperedge_names = [
@@ -407,7 +406,6 @@ if __name__ == "__main__":
             # Store data
             results.append([
                 pathway_name,           # Pathway Name
-                ", ".join(gene_names),  # Gene (Subunit) Names
                 str(node_indices),      # Node Indices
                 len(node_indices),      # Number of Nodes
                 str(hyperedge_names),   # Hyperedges (gene names)
@@ -417,7 +415,7 @@ if __name__ == "__main__":
 
         # Convert to DataFrame
         df_final = pd.DataFrame(results, columns=[
-            "Pathway", "Gene Names", "Nodes", "Number of Nodes",
+            "Pathway", "Nodes", "Number of Nodes",
             "Hyperedges (genes)", "Hyperedges (indices)", "Number of Hyperedges"
         ])
         
