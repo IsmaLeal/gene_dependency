@@ -1,306 +1,12 @@
 import os
-import graph_tool.all as gt
-import pandas as pd
 import numpy as np
-import time
+import pandas as pd
+import multiprocessing
+import graph_tool.all as gt
 from typing import Tuple, List
-from tqdm import tqdm
 import matplotlib.pyplot as plt
-from statsmodels.stats.multitest import multipletests
 from multiprocessing import Pool, Manager
-
-
-def get_ranked_corrs() -> None:
-    """
-    Computes and saves a symmetric matrix of ranked correlations for every pair of genes.
-
-    The function loads a gene dependency dataset, computes the correlation matrix, applies
-    a ranking transformation to each row, and symmetrises the result.
-    The array is saved in 'rank_transf_symm.csv' with row and column labels.
-
-    Notes
-    -----
-    - The ranking transformation accounts for ties by assigning their average rank.
-    - The correlation matrix is adjusted for NaN values by replacing them with zero.
-    - The symmetrisation ensures the highest rank is preserved between pairs.
-    """
-    def rank_array(arr: np.ndarray) -> np.ndarray:
-        """
-        Ranks the elements in an array, handling ties by assigning their average rank.
-
-        Parameters
-        ----------
-        arr : np.ndarray
-            Input numerical array.
-
-        Returns
-        -------
-        np.ndarray
-            Ranked array with the same shape as the input.
-        """
-        temp = arr.argsort()            # Indices that sort the array
-        ranks = temp.argsort() + 1      # Ranks
-
-        # Compute rank of ties
-        sorted = np.sort(arr)
-        sorted_ranks = np.sort(ranks).astype('float64')
-        for i in range(len(arr)):
-            start = 0
-            if i == 0 or sorted[i] != sorted[i - 1]:            # Check if element starts a series of ties
-                start = i
-            if i == len(arr) - 1 or sorted[i] != sorted[i + 1]: # If it ends a series of ties
-                end = i + 1
-                avg_rank = np.mean(sorted_ranks[start:end])
-                sorted_ranks[start:end] = avg_rank
-                
-        return sorted_ranks[np.argsort(temp)]
-
-    df = pd.read_csv("../datasets/CRISPRGeneDependency.csv", delimiter=",")
-    depmap = df.iloc[:, 1:]                       # Get rid of cell line names
-    gene_names = depmap.columns.values            # Save gene names as np.ndarray
-    corrs_matrix = depmap.corr()                  # Get correlation matrix
-    corrs_matrix.fillna(0, inplace=True)          # Adjust for NaN due to some genes having S.D.=0
-    np.fill_diagonal(corrs_matrix.values, 0)
-
-    # Create array to hold the ranks
-    rank_transformation = np.zeros_like(corrs_matrix.values)
-    for idx, cell_line in tqdm(enumerate(corrs_matrix.values)):
-        rank_transformation[idx, :] = rank_array(cell_line)
-
-    # Symmetrise by taking the largest rank
-    for i in tqdm(range(rank_transformation.shape[0])):
-        for j in range(i, rank_transformation.shape[1]):
-            if rank_transformation[i, j] > rank_transformation[j, i]:
-                rank_transformation[j, i] = rank_transformation[i, j]
-            elif rank_transformation[i, j] < rank_transformation[j, i]:
-                rank_transformation[i, j] = rank_transformation[j, i]
-
-    # Save as .csv file
-    matrix = pd.DataFrame(rank_transformation)
-    matrix.columns = gene_names
-    matrix.index = gene_names
-    matrix.to_csv("ranked_corrs_2.csv", index=True)
-
-
-def get_abs_corrs() -> None:
-    """
-    Computes and saves a symmetric matrix of absolute correlations for every pair of genes.
-    
-    The function loads a gene dependency dataset and computes the absolute correlation matrix.
-    The array is saved in 'rank_transf_symm.csv' with row and column labels.
-
-    Notes
-    -----
-    - The correlation matrix is adjusted for NaN values by replacing them with zero.
-    """
-    df = pd.read_csv("../datasets/CRISPRGeneDependency.csv", delimiter=",")
-    depmap = df.iloc[:, 1:]                   # Get rid of cell line names
-    gene_names = depmap.columns.values        # Save gene names as np.ndarray
-    corrs_matrix = depmap.corr()              # Get correlation matrix
-    corrs_matrix.fillna(0, inplace=True)      # Adjust for NaN due to some genes having S.D.=0
-    np.fill_diagonal(corrs_matrix.values, 0)
-    corrs_matrix.columns = gene_names
-    corrs_matrix.index = gene_names
-    abs_corrs = corrs_matrix.abs()            # Absolute values
-    abs_corrs.to_csv("../datasets/abs_corrs_2.csv", index=True)
-
-
-def clean_col_names(col: str) -> str:
-    """
-    Extracts gene names from a label formatted as 'GeneName (GeneID)'.
-
-    Parameters
-    ----------
-    col : str
-        Column label containing gene name and ID.
-
-    Returns
-    -------
-    str
-        Extracted gene name.
-    """
-    return col.split(" (")[0]
-
-
-def get_genes(complex: str) -> List[str]:
-    """
-    Splits a complex string containing multiple gene names separated by ';'.
-
-    Example input: 'PRORP;TRMT10C;HSD17B10'
-    Example output: ['PRORP', 'TRMT10C', 'HSD17B10']
-    
-    Parameters
-    ----------
-    complex : str
-        String of gene names separated by semicolons.
-
-    Returns
-    -------
-    List[str]
-        List of individual gene names.
-    """
-    return complex.split(";")
-
-
-def filter_CORUM() -> pd.DataFrame:
-    """
-    Filters the CORUM dataset for relevant protein complexes based on pre-defined cell line names.
-
-    Returns
-    -------
-    pd.DataFrame
-        Filtered dataset of protein complexes.
-    """
-    # Load CORUM dataset
-    file_path = "../datasets/humanComplexes.txt"
-    try:
-        df = pd.read_csv(file_path, delimiter="\t")
-    except:
-        print(f"File {file_path} does not exist. Please re-download from CORUM website")
-
-    # Select rows containing these substrings in their 'Cell line' value
-    substrings = ["T cell line ED40515",
-                  "mucosal lymphocytes",
-                  "CLL cells",
-                  "monocytes",
-                  "THP-1 cells",
-                  "bone marrow-derived",
-                  "monocytes, LPS-induced",
-                  "THP1 cells",
-                  "human blood serum",
-                  "human blood plasma",
-                  "plasma",
-                  "CSF",
-                  "human leukemic T cell JA3 cells",
-                  "erythrocytes",
-                  "peripheral blood mononuclear cells",
-                  "African Americans",
-                  "SKW 6.4",
-                  "BJAB cells",
-                  "Raji cells",
-                  "HUT78",
-                  "J16",
-                  "H9",
-                  "U-937",
-                  "Jurkat T",
-                  "NB4 cells",
-                  "U937",
-                  "early B-lineage",
-                  "T-cell leukemia",
-                  "lymphoblasts",
-                  "whole blood and lymph",
-                  "human neutrophil-differentiating HL-60 cells",
-                  "human peripheral blood neutrophils",
-                  "human neutrophils from fresh heparinized human peripheral blood",
-                  "human peripheral blood",
-                  "HCM",
-                  "liver-hematopoietic",
-                  "cerebral cortex",
-                  "human brain",
-                  "pancreatic islet",
-                  "human hepatocyte carcinoma HepG2 cells",
-                  "Neurophils",
-                  "H295R adrenocortical",
-                  "frontal cortex",
-                  "myometrium",
-                  "vascular smooth muscle cells",
-                  "Dendritic cells",
-                  "intestinal epithelial",
-                  "Primary dermal fibroblasts",
-                  "HK2 proximal",
-                  "brain pericytes",
-                  "HepG2",
-                  "HEK 293 cells, liver",
-                  "normal human pancreatic duct epithelial",
-                  "pancreatic ductal adenocarcinoma",
-                  "OKH cells",
-                  "cultured podocytes",
-                  "renal glomeruli",
-                  "VSMCs",
-                  "differentiated HL-60 cells",
-                  "SH-SY5Y cells",
-                  "frontal and entorhinal cortex",
-                  "SHSY-5Y cells",
-                  "hippocampal HT22 cells",
-                  "primary neurons",
-                  "neurons",
-                  "renal cortex membranes",
-                  "Kidney epithelial cells",
-                  "skeletal muscle cells",
-                  "Skeletal muscle fibers",
-                  "differentiated 3T3-L1",
-                  "brain cortex",
-                  "cortical and hippocampal areas",
-                  "human H4 neuroglioma",
-                  "Thalamus",
-                  "HISM",
-                  "pancreas",
-                  "RCC4",
-                  "C2C12 myotube",
-                  "XXVI muscle",
-                  "SH-SY5Y neuroblastoma",
-                  "HCC1143",
-                  "Hep-2",
-                  "PANC-1",
-                  "HEK293T cells",
-                  "HEK-293 cells",
-                  "heart",
-                  "epithelium",
-                  "kidney",
-                  "heart muscle",
-                  "central nervous system",
-                  "COS-7 cells",
-                  "ciliary ganglion",
-                  "striated muscle",
-                  "PC12",
-                  "293FR cells"]
-    pattern = "|".join(substrings)
-
-    # Select rows whose 'Cell line' value is exactly one of these
-    exact = ["muscle", "293 cells", "brain", "HEK 293 cells"]
-
-    # Create Boolean mask selecting all the rows described
-    partial_mask = df["Cell line"].str.contains(pattern, case=False, na=False)
-    exact_mask = df["Cell line"].isin(exact)
-    total_mask = partial_mask | exact_mask
-
-    # Obtain filtered dataframe, select relevant columns, sort by 'Cell line'
-    complexes_full = df[total_mask]
-    complexes = complexes_full[["ComplexID", "ComplexName", "Cell line", "subunits(Gene name)", "GO description", "FunCat description"]]
-    complexes = complexes.sort_values(by=["Cell line"])
-
-    # Exclude those complexes including only one subunit/ gene
-    mask_mono = [len(complexes["subunits(Gene name)"].values[i].split(";")) > 1 for i in range(len(complexes))]
-    complexes = complexes.loc[mask_mono]
-    return complexes
-
-
-def load_CORUM() -> List[str]:
-    """
-    Loads the filtered CORUM dataset from '../datasets/filtered_complexes.csv'.
-
-    Returns
-    -------
-    complexes : List[str]
-        List of protein complexes (each complex is a list of gene names) or None
-        if the file is missing.
-    
-    Examples
-    --------
-    >>> complexes = load_CORUM()
-    >>> print(complexes[0])
-    ["GeneA", "GeneB", "GeneC"]
-    """
-    file_path = "../datasets/filtered_complexes.csv"
-    try:
-        df = pd.read_csv(file_path)
-        complexes_strings = df['subunits(Gene name)'].values
-        complexes = [complex.split(";") for complex in complexes_strings]
-    except:
-        print(f"File {file_path} does not exist. Please run filter_CORUM().")
-        complexes = None
-    return complexes
-
+from general.utils import clean_col_names
 
 def init_worker() -> None:
     """
@@ -312,7 +18,7 @@ def init_worker() -> None:
     np.random.seed(seed)
 
 
-def prep_graph(threshold: float = 0.2, ranked: bool = False) -> graph_tool.Graph:
+def create_graph_gt(threshold: float = 0.2, ranked: bool = False) -> gt.Graph:
     """
     Constructs a graph-tool Graph object from a correlation matrix.
 
@@ -334,7 +40,7 @@ def prep_graph(threshold: float = 0.2, ranked: bool = False) -> graph_tool.Graph
 
     Examples
     --------
-    >>> g = prep_graph(threshold=0.5, ranked=True)
+    >>> g = create_graph_gt(threshold=0.5,ranked=True)
     >>> print(g.num_vertices)
     """
     try:
@@ -342,26 +48,26 @@ def prep_graph(threshold: float = 0.2, ranked: bool = False) -> graph_tool.Graph
             corrs = pd.read_csv("../datasets/ranked_corrs.csv", delimiter=",", index_col=0)
         else:
             corrs = pd.read_csv("../datasets/abs_corrs.csv", delimiter=",", index_col=0)
-        corrs /= np.max(corrs.values)   # Normalise
-        gene_names = np.array(          # Remove gene IDs
+        corrs /= np.max(corrs.values)  # Normalise
+        gene_names = np.array(  # Remove gene IDs
             [clean_col_names(col) for col in corrs.columns]
         )
-    
+
         # Create adjacency matrix A
         A = (corrs.values > threshold).astype(np.int8)
-    
+
         # Instantiate graph-tool Graph and add nodes & edges based on A
         g = gt.Graph(directed=False)
         g.add_vertex(n=A.shape[0])
-        edges = np.transpose(np.nonzero(np.triu(A, 1))) # Use k=1 to prevent self-interactions
+        edges = np.transpose(np.nonzero(np.triu(A, 1)))  # Use k=1 to prevent self-interactions
         g.add_edge_list(edges)
-    
+
         # Add gene names to the nodes
         names = g.new_vertex_property("string")
         for v in g.vertices():
             names[int(v)] = gene_names[int(v)]
         g.vertex_properties["names"] = names
-        
+
     except FileNotFoundError as e:
         print(f"Error: {e}. Try running get_ranked_corrs() or get_abs_corrs().")
 
@@ -390,9 +96,9 @@ def check_genes_presence(complex_names: List[str],
     return present_list
 
 
-def count_external_edges(g: graph_tool.Graph,
-                         internal_mask: graph_tool.PropertyMap,
-                         external_mask: graph_tool.PropertyMap) -> int:
+def count_external_edges(g: gt.Graph,
+                         internal_mask: gt.PropertyMap,
+                         external_mask: gt.PropertyMap) -> int:
     """
     Counts the number of edges that connect an internal node (part of a complex) to an external node.
 
@@ -416,9 +122,9 @@ def count_external_edges(g: graph_tool.Graph,
     return g.num_edges() - internal_view.num_edges() - external_view.num_edges()
 
 
-def edge_density_ratio(g: graph_tool.Graph,
-                       internal_mask: graph_tool.PropertyMap,
-                       external_mask: graph_tool.PropertyMap) -> float:
+def edge_density_ratio(g: gt.Graph,
+                       internal_mask: gt.PropertyMap,
+                       external_mask: gt.PropertyMap) -> float:
     """
     Computes the Edge Density Ratio (EDR), which is the ratio of internal edge density (IED) to external edge density (EED).
 
@@ -493,7 +199,7 @@ def single_rewiring(internal_nodes: List[int],
     Returns
     -------
     edr : float
-        The computed EDR for this rewiring iteration.    
+        The computed EDR for this rewiring iteration.
     """
     # Get the node degree sequence
     current_degrees = degrees.copy()
@@ -512,7 +218,9 @@ def single_rewiring(internal_nodes: List[int],
     for idx, node in enumerate(internal_nodes):
         while internal_degrees_list[idx] > 0:
             # Compute probabilities for connecting stubs to other nodes
-            probs = [internal_degrees_list[i] / sum(internal_degrees_list[j] for j, _ in enumerate(internal_degrees_list) if j != idx) for i, _ in enumerate(internal_degrees_list) if i != idx]
+            probs = [internal_degrees_list[i] / sum(
+                internal_degrees_list[j] for j, _ in enumerate(internal_degrees_list) if j != idx) for i, _ in
+                     enumerate(internal_degrees_list) if i != idx]
 
             # Select target node based on computed probabilities
             r = np.random.random()
@@ -531,7 +239,7 @@ def single_rewiring(internal_nodes: List[int],
                     internal_degrees_list[iteration - 1] -= 1
             else:
                 N_ext += 1
-                internal_degrees_list[-1] -=1
+                internal_degrees_list[-1] -= 1
             internal_degrees_list[idx] -= 1
 
     # Calculate EDR for this iteration
@@ -542,11 +250,11 @@ def single_rewiring(internal_nodes: List[int],
     eed = N_ext / possible_external_edges
     edr = ied / eed if eed != 0 else float("inf")
 
-    progress_list.append(1)    # Track progress for multiprocessing
+    progress_list.append(1)  # Track progress for multiprocessing
     return edr
 
 
-def simulate_rewiring(g: graph_tool.Graph,
+def simulate_rewiring(g: gt.Graph,
                       internal_nodes: List[int],
                       num_iterations: int = 1000) -> Tuple[float, float, List[float]]:
     """
@@ -555,7 +263,7 @@ def simulate_rewiring(g: graph_tool.Graph,
 
     Parameters
     ----------
-    g : graph_tool.Graph
+    g : gt.Graph
         The graph-tool Graph object representing the genes.
     internal_nodes : List[int]
         List of node indices that are internal to the complex of interest.
@@ -588,7 +296,8 @@ def simulate_rewiring(g: graph_tool.Graph,
     with Manager() as manager:
         progress_list = manager.list()
         with Pool(processes=40, initializer=init_worker) as pool:
-            results = [pool.apply_async(single_rewiring, args=(internal_nodes, external_nodes, degrees, progress_list)) for _ in range(num_iterations)]
+            results = [pool.apply_async(single_rewiring, args=(internal_nodes, external_nodes, degrees, progress_list))
+                       for _ in range(num_iterations)]
             ratios = [result.get() for result in results]
 
     # Create masks needed to call `edge_density_ratio()`
@@ -605,11 +314,11 @@ def simulate_rewiring(g: graph_tool.Graph,
 
     # Compute the p-value
     p_value = np.mean([r >= observed for r in ratios])
-    
+
     return observed, p_value, ratios
 
 
-def edge_density(g: graph_tool.Graph) -> float:
+def edge_density(g: gt.Graph) -> float:
     """
     Computes the global edge density of a graph.
 
@@ -643,7 +352,7 @@ def plot_edgestats_per_threshold(n_points: int = 100) -> None:
 
     # Parallelise the graph creation
     with Pool(processes=40) as pool:
-        results = [pool.apply_async(prep_graph, args=(threshold, False)) for threshold in thresholds]
+        results = [pool.apply_async(create_graph_gt, args=(threshold, False)) for threshold in thresholds]
         gs = [result.get() for result in results]
 
     # Save statistics
@@ -697,7 +406,7 @@ def hist_num_genes(threshold: float) -> None:
         df = pd.read_csv(f"results/results_{number}.csv")
     except FileNotFoundError as e:
         print(f"Error: The file 'results/results_{number}.csv' was not found.")
-        print("Please run 'fraction_complexes.py' in this directory to generate the required file.")
+        print("Please run 'graph_analysis.py' in this directory to generate the required file.")
 
     # Extract gene counts
     significant_df = df[df["Significant (BY)"]]
@@ -716,7 +425,8 @@ def hist_num_genes(threshold: float) -> None:
     ax.set_xlabel("Number of genes")
     ax.set_ylabel("Frequency")
     ax.set_yscale("log")
-    ax.xaxis.set_ticks(np.arange(min(min(significant), min(nonsignificant)), max(max(significant), max(nonsignificant))+1, 4))
+    ax.xaxis.set_ticks(
+        np.arange(min(min(significant), min(nonsignificant)), max(max(significant), max(nonsignificant)) + 1, 4))
     ax.legend()
 
     plt.tight_layout()
