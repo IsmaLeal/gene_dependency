@@ -14,13 +14,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.utils.class_weight import compute_class_weight
 
-# IDENTIFY TOP GENES WITH MORE UNCERTAIN PREDICTIONS ACROSS THE PATHWAYS THEY BELONG TO
-
 # Paths
 results_path = "./ml_results/"  # ML model performances
 features_path = "./features/"   # ML features (topological metrics and embeddings)
 visuals_path = "./visualisations/"
 labels_path = "../datasets/CRISPRInferredCommonEssentials.csv"
+corum_path = "../datasets/humanComplexes.txt"
 os.makedirs(visuals_path, exist_ok=True)
 
 # Loggging
@@ -219,11 +218,15 @@ def train_and_predict(
     return y_pred, probs, y_test, X_test
 
 
-def identify_uncertain_genes(
-        df: pd.DataFrame, y_pred: np.ndarray, probs: np.ndarray, y_test: np.ndarray
+def gene_prediction_confidence(
+        df: pd.DataFrame, y_pred: np.ndarray, probs: np.ndarray, y_test: np.ndarray, mode: str = "uncertain"
 ) -> Tuple[pd.DataFrame, List]:
     """
-    Identifies genes with the most uncertain predictions across pathways.
+    Identifies genes with the most uncertain or certain predictions across pathways.
+
+    This function finds the confidence of every essentiality prediction, one for each gene-pathway pair,
+    and counts the number of high-/low-confidence predictions that each gene has. It then selects and
+    returns the top 20 genes with more high-/low-cofidence predictions.
 
     Parameters
     ----------
@@ -236,45 +239,61 @@ def identify_uncertain_genes(
         Class probabilities for X_test (if applicable, else None).
     y_test : np.ndarray
         Array with the essentiality labels from the CRISPR Inferred Common Essentials dataset.
+    mode : str, optional
+        Determines whether to compute the most uncertain or certain genes. Options:
+        - "uncertain": Genes with more number of lower-confidence predictions.
+        - "certain": Genes with more number of high-confidence predictions.
 
     Returns
     -------
-    uncertain_data : pd.DataFrame
+    confidence_data : pd.DataFrame
         DataFrame containing each gene-pathway pair with its essentiality predictions and labels, together
         with the probability associated to each prediction (if applicable).
     top_20_genes : list
-        List containing the top 20 genes with the largest number of uncertain predictions.
+        List containing the top 20 genes with the largest number of either uncertain or certain predictions.
+
+    Raises
+    ------
+    ValueError
+        If `mode` is not "uncertain" or "certain".
     """
+    if mode not in ["uncertain", "certain"]:
+        raise ValueError(f"Invalid mode '{mode}'. Choose 'uncertain' or 'certain'.")
+    if mode == "uncertain":
+        p_min, p_max = 0.5, 0.55    # Low confidence range
+    else:
+        p_min, p_max = 0.85, 1.00   # High confidence range
+
     nodes = df["Gene"]
     names = df["Gene name"]
     pathways = df["Pathway"]
 
-    # Identify low-confidence predictions
-    uncertainty_flags = np.zeros(len(y_test))
+    # Identify predictions of interest
+    confidence_flags = np.zeros(len(y_test))
     for idx, p in enumerate(probs[:, 0]):   # Class 0 probabilities
-        if 0.5 <= p <= 0.55:
-            uncertainty_flags[idx] = 1
+        if p_min <= p <= p_max:
+            confidence_flags[idx] = 1
     for idx, p in enumerate(probs[:, 1]):   # Class 1 probabilities
-        if 0.5 <= p <= 0.55:
-            uncertainty_flags[idx] = 1
+        if p_min <= p <= p_max:
+            confidence_flags[idx] = 1
 
-    # Create a DataFrame with uncertainty data
-    uncertain_data = pd.DataFrame({
+    # Create a DataFrame with confidence data
+    confidence_data = pd.DataFrame({
         "Gene": nodes,
         "Gene name": names,
         "Pathway": pathways,
         "Prediction": y_pred,
         "Label": y_test,
-        "Low confidence": uncertainty_flags
+        f"{mode.capitalize()} confidence": confidence_flags
     })
 
     # Sum low-confidence counts for every gene
-    gene_uncertainty = uncertain_data.groupby("Gene name")["Low confidence"].sum().sort(ascending=False)
+    gene_uncertainty = confidence_data.groupby("Gene name")["Low confidence"].sum().sort(ascending=False)
     top_20_genes = gene_uncertainty.head(20).index.tolist()
 
     logging.info(f"Top 20 genes with most uncertain predictions: {top_20_genes}")
 
-    return uncertain_data, top_20_genes
+    return confidence_data, top_20_genes
 
 
 def visualise_uncertainty_graph(uncertain_data: pd.DataFrame, top_20_genes: List) -> None:
@@ -350,8 +369,10 @@ def visualise_uncertainty_graph(uncertain_data: pd.DataFrame, top_20_genes: List
 
 def match_protein_complexes(confident_data: pd.DataFrame):
     """
-    Checks if hyperedges from pathways associated to confident predictions of gene-pathway pairs are
-    part of CORUM complexes.
+    Checks if hyperedges from pathways associated with high-confidence gene-pathway predictions
+    are part of CORUM complexes.
+
+    HOWWW DO WE EXTRACT CERTAIN DATAAA
 
     Parameters
     ----------
@@ -363,6 +384,64 @@ def match_protein_complexes(confident_data: pd.DataFrame):
     matching_complexes : pd.DataFrame
         DataFrame with CORUM complexes.
     """
+    corum_df = safe_read_csv(corum_path, delimiter="\t")
+    corum_df = corum_df[["ComplexID", "subunits(Gene name)", "Cell line"]]
+
+    corum_complexes = [
+        (frozenset(genes.split(";")), cid, cell_line)
+        for cid, genes, cell_line in zip(
+            corum_df["ComplexID"], corum_df["subunits(Gene name)"], corum_df["Cell line"]
+        )
+    ]
+
+    # Load hyperedges
+    hyperedges = safe_read_csv("../datasets/hyperedges_final.csv")
+    hyperedges["Hyperedges (gene names)"] = hyperedges["Hyperedges (gene names)"].apply(eval)
+
+    total = 0
+    matched = 0
+    matched_complexes = []
+
+    # Iterate over confident gene-pathway pairs
+    logging.info(f"Checking gene-pathway pairs...")
+    for _, row in confident_data.iterrows():
+        gene = row["Gene name"]
+        pathway = row["Pathway"]
+
+        # Get hyperedges in this pathway
+        pathway_edges = hyperedges[hyperedges["Pathway"] == pathway]["Hyperedges (gene names)"]
+        if pathway_edges.empty:
+            continue
+
+        for edge in pathway_edges.values[0]:
+            if gene not in edge:    # Skip if this gene isn't in this hyperedge
+                continue
+
+            total += 1
+            for complex_genes, complex_id, cell_line in corum_complexes:
+                if complex_genes.issubset(edge):    # Check if CORUM complex is within the hyperedge
+                    if gene not in complex_genes:   # Ensure gene is in the complex
+                        continue
+                    matched += 1
+                    matched_complexes.append({
+                        "Gene": gene,
+                        "Pathway": pathway,
+                        "ComplexID": complex_id,
+                        "Complex Genes": ";".join(complex_genes),
+                        "Cell line": cell_line
+                    })
+                    break
+
+    matched_df = pd.DataFrame(matched_complexes)
+
+    logging.info(f"From {total} hyperedges, found {matched} matching protein complexes.")
+
+    if not matched_df.empty:
+        import ace_tools as tools
+        tools.display_dataframe_to_user(name="Matched Protein Complexes", dataframe=matched_df)
+
+    return matched_df
+
 
 
 if __name__ == "__main__":
@@ -370,5 +449,7 @@ if __name__ == "__main__":
     X, y, df = load_data(dataset_name)
     y_pred, probs, y_test, X_test = train_and_predict(X, y, best_model)
     df_test = df.iloc[X_test.index].reset_index(drop=True)
-    uncertain_data, top_20_genes = identify_uncertain_genes(df_test, y_pred, probs, y_test)
+    uncertain_data, top_20_genes = gene_prediction_confidence(df_test, y_pred, probs, y_test, mode="uncertain")
     visualise_uncertainty_graph(uncertain_data, top_20_genes)
+    confident_data, _ = gene_prediction_confidence(df_test, y_pred, probs, y_test, mode="certain")
+    matched_df = match_protein_complexes(confident_data)
