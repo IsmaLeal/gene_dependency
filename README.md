@@ -65,6 +65,14 @@ To set up the environment for this project:
    pip install -r requirements.txt
    ```
 
+4. **Install graph-tool**
+
+   Graph-tool is a non-PyPl package, so it must be installed manually via conda. For Debian/Ubuntu:
+    ```bash
+    sudo apt-get install python3-graph-tool
+    ```
+   See https://graph-tool.skewed.de/ for further installation instructions.
+
 ## Usage
 
 1. **Data preparation**: Place the necessary datasets into the `datasets/` directory
