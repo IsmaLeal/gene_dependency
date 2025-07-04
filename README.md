@@ -3,7 +3,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-This repository contains the code and data for the MSc dissertation titled "Higher-Order Interactions in Gene Dependency," conducted in collaboration with Novo Nordisk. The project focuses on analyzing gene dependencies using advanced computational methods to uncover higher-order interactions.
+This repository contains the code and data for the MSc dissertation titled "Higher-Order Interactions in Gene Dependency," submitted for the University of Oxford and conducted in collaboration with Novo Nordisk. The project focuses on analyzing gene dependencies using advanced computational methods to uncover higher-order interactions.
 
 ## Table of Contents
 
